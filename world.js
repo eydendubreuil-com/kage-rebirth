@@ -18,6 +18,7 @@ const ROADS = [
   { w: 2.0, pts: [[34, 0], [56, -20], [74, -44], [80, -50]] },
   { w: 1.8, pts: [[0, 60], [26, 74], [50, 92], [72, 104]] },
   { w: 1.6, pts: [[0, 80], [-24, 74], [-50, 70]] },
+  { w: 1.6, pts: [[-30, 0], [-26, 10], [-23, 21.5]] },
 ];
 const TERR = { x0: -24, x1: 24, z0: -122, z1: -66, y: 3.2 };   /* terrasse du dojo */
 export const WATER_Y = (s) => s < 60 ? lerp(5.2, 0.9, s / 60) : Math.max(-0.7, lerp(0.9, -0.7, (s - 60) / 140));
@@ -364,7 +365,8 @@ export async function buildWorld(scene, renderer, Q, progress) {
   for (let zz = -44; zz <= 26; zz += 10) { lots.push([-13, zz, Math.PI / 2]); lots.push([13, zz, -Math.PI / 2]); }
   for (let xx = -56; xx <= -22; xx += 10) { lots.push([xx, -11, 0]); lots.push([xx, 11, Math.PI]); }
   for (let xx = 24; xx <= 56; xx += 10) { lots.push([xx, -12, 0]); lots.push([xx, 10, Math.PI]); }
-  const skip = (x, z) => (x === 13 && z === -14) || (x === -13 && z === -24) || (x === -13 && z === 16) || (x === 13 && z === 6);
+  const houseOk = (x, z) => [[0, 0], [-4.2, -4.2], [4.2, -4.2], [-4.2, 4.2], [4.2, 4.2], [0, 4], [0, -4]].every(([dx, dz]) => { const rv = polyDist(RIVER, x + dx, z + dz); return rv.d >= (rv.s < 40 ? 5 : 6.5) + 2.5; });
+  const skip = (x, z) => !houseOk(x, z) || (x === 13 && z === -14) || (x === -13 && z === -24) || (x === -13 && z === 16) || (x === 13 && z === 6);
   for (const [x, z, rot] of lots) {
     if (skip(x, z)) continue;
     const o = { two: R() < 0.4, lantern: R() < 0.5 };
@@ -492,7 +494,8 @@ export async function buildWorld(scene, renderer, Q, progress) {
   }
   /* ponts */
   const bridge = (cx, cz, rot, len, wid = 3.2) => {
-    const gy = Math.min(WATER_Y(polyDist(RIVER, cx, cz).s) + 0.9, terrainH(cx, cz) + 0.9);
+    const ex0 = cx + Math.sin(rot) * len / 2, ez0 = cz + Math.cos(rot) * len / 2, ex1 = cx - Math.sin(rot) * len / 2, ez1 = cz - Math.cos(rot) * len / 2;
+    const gy = Math.max(WATER_Y(polyDist(RIVER, cx, cz).s) - 1.0, Math.max(terrainH(ex0, ez0), terrainH(ex1, ez1)) - 0.1);
     const k3 = new Kit(B).set(cx, 0, cz, rot), seg = 14;
     const yAt = (t) => gy + 0.2 + Math.sin(t * Math.PI) * 1.5;
     for (let i = 0; i < seg; i++) {
@@ -511,7 +514,7 @@ export async function buildWorld(scene, renderer, Q, progress) {
   };
   bridge(0, 44, 0, 22);
   bridge(30, 72, Math.atan2(26, 14) * 0 + 1.05, 20, 2.4);
-  bridge(-49, 9, 0.6, 20, 2.4);
+  bridge(-54, -1, Math.PI / 2, 20, 2.4);
   W.pois.push({ id: 'pont', name: 'Pont des Murmures', x: 0, z: 44, r: 10 });
 
   /* camp des bandits, au sud-est */

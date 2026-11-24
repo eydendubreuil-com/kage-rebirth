@@ -85,7 +85,7 @@ const LORE = [
   { id: 'r2', x: 83, z: -66, title: 'Les sept dojos', text: 'Sakura, l\'Ombre, la Montagne, le Rouge, l\'Eau, le Jade, et le Vide. Chacun garde une région et une manière de se battre. Le septième n\'apparaît sur aucune carte.' },
   { id: 'r3', x: -99, z: -95, title: 'THE NULL', text: 'Le Null n\'efface pas les choses. Il efface le souvenir des choses. Un pont disparaît des mémoires, et un matin plus personne ne le traverse : il finit par tomber.' },
   { id: 'r4', x: -106, z: -60, title: 'Hana', text: 'Hana a gagné le dernier KAGE TRIAL. C\'est ce qu\'on raconte. Elle-même dit ne garder aucun souvenir de la finale.' },
-  { id: 'r5', x: -38, z: 104, title: 'Kage', text: 'Le nom du tournoi est aussi celui d\'un combattant. Les anciens disent que Kage n\'a jamais perdu, et jamais gagné non plus.' },
+  { id: 'r5', x: -22.8, z: 17.8, yTop: true, title: 'Kage', text: 'Le nom du tournoi est aussi celui d\'un combattant. Les anciens disent que Kage n\'a jamais perdu, et jamais gagné non plus.' },
 ];
 export function populate() {
   const sc = G.scene;
