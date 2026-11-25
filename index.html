@@ -121,6 +121,12 @@ textarea{width:100%;height:70px;background:#0e0e10;color:var(--paper2);border:1p
 #dialog .ch button{text-align:left;padding:8px 14px;border:1px solid var(--line);border-radius:6px;font-size:14px;color:var(--paper2)}
 #dialog .ch button:hover{border-color:var(--paper);color:var(--paper)}
 #dialog .more{position:absolute;right:30px;bottom:16px;font-size:11px;color:var(--mute);letter-spacing:.2em}
+#dialog .dfree{display:flex;gap:8px;margin-top:10px;pointer-events:auto}
+#dialog .dfree.hide{display:none}
+#dialog .dfree input{flex:1;min-width:0;font:inherit;font-size:14px;padding:8px 13px;border-radius:18px;border:1px solid var(--line);background:rgba(10,10,12,.8);color:var(--paper);outline:none}
+#dialog .dfree input:focus{border-color:var(--gold)}
+#dialog .dfree button{font:inherit;font-size:12px;letter-spacing:.08em;padding:8px 16px;border-radius:18px;border:1px solid var(--line);color:var(--paper2);background:rgba(201,164,92,.08)}
+#dialog .dfree button:hover{border-color:var(--gold);color:var(--paper)}
 #cine{z-index:14}
 #cine .lb{position:absolute;left:0;right:0;height:0;background:#000;transition:height .8s ease}
 #cine.on .lb{height:11vh}
@@ -252,7 +258,7 @@ window.addEventListener('unhandledrejection',function(e){show((e.reason&&e.reaso
 </div>
 
 <div id="cine" class="layer"><div class="lb t"></div><div class="lb b"></div><div id="subs"></div><div id="card"><div class="a" id="carda"></div><div class="b" id="cardb"></div></div><div id="skip" class="hide">ENTRÉE · PASSER</div></div>
-<div id="dialog" class="layer hide"><div class="dbox" id="dbox"><div class="who" id="dwho"></div><div class="txt" id="dtxt"></div><div class="ch" id="dch"></div><div class="more" id="dmore">E · ESPACE · CLIC</div></div></div>
+<div id="dialog" class="layer hide"><div class="dbox" id="dbox"><div class="who" id="dwho"></div><div class="txt" id="dtxt"></div><div class="ch" id="dch"></div><form id="dfree" class="dfree hide"><input id="dinput" type="text" maxlength="180" autocomplete="off" placeholder="Écris ce que tu veux dire…"><button type="submit">Envoyer</button></form><div class="more" id="dmore">E · ESPACE · CLIC</div></div></div>
 <div id="pause" class="layer hide"><div class="side"><h2>休</h2><div class="menu" id="pmenu">
   <button data-p="resume">Reprendre</button><button data-p="journal">Journal</button><button data-p="map">Carte</button><button data-p="inv">Inventaire</button><button data-p="skills">Compétences</button><button data-p="look">Personnage</button><button data-p="settings">Paramètres</button><button data-p="save">Sauvegarder</button><button data-p="quit">Menu principal</button>
 </div></div><div class="content" id="pcontent"></div></div>
