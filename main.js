@@ -6,7 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { W, buildWorld, updateWorld, groundAt, terrainH, inWater, RIVER } from './world.js';
-import { G, initInput, initCamera, initFx, createPlayer, gameUpdate, tap, clearTaps, notify, spawnEnemy, clearEnemies, setLook, hpMaxOf } from './game.js';
+import { G, initInput, initCamera, initFx, createPlayer, gameUpdate, tap, clearTaps, notify, spawnEnemy, clearEnemies, setLook, setCharacter, hpMaxOf } from './game.js';
 import { ST, QUESTS, populate, storyUpdate, cutUpdate, dialogUpdate, dialogNext, dialog, findInteract, interact, introCut, save, hasSave, readSave, applySave, startQuest, animalsUpdate, resetNPCs, putSave, readSave as readLocal, useItem, buySkill, importCode, exportCode } from './story.js';
 import { UI, loadProgress, hideLoad, toast, showTitle, refreshMenu, setTrack, openPanel, closePanel, pauseOpen, pauseClose, pauseTab, hudUpdate, showHelp, dialogDraw, cine, subs, card, fade, lore, loreClose } from './ui.js';
 import { A, S, audioInit, applyVolumes, music, ambience, TRACK_NAMES } from './audio.js';
@@ -14,6 +14,8 @@ let _C = { CLOUD: { ready: false, user: null, error: 'La connexion en ligne est 
 try { _C = await import('./cloud.js'); } catch (e) { console.warn('cloud.js indisponible', e); }
 const { CLOUD, cloudInit, cloudSave, cloudLoad, signIn, signOut, onCloud } = _C;
 import { polyDist, clamp, lerp, damp, easeInOut } from './util.js';
+import { REGIONS, CHARS, MUSIC_BY_REGION, sealsCount } from './regions.js';
+import './secrets.js';
 
 const QUAL = {
   basse: { terrainSeg: 170, trees: 650, grass: 7000, petals: 140, shadow: 1024, pr: 0.8, bloom: false, fogMul: 1.25, aa: false },
@@ -87,16 +89,25 @@ function titleCam(dt) {
 /* ---------- partie : nouvelle, continuer, entraînement ---------- */
 function resetGame() {
   clearEnemies(); const pl = G.pl;
-  Object.assign(pl, { hp: 100, hpMax: 100, en: 30, level: 1, xp: 0, sp: 0, skills: {}, ryo: 40, inv: { onigiri: 2, the: 1 }, special: false, ult: false, lock: null, dead: false, combo: 0, action: null, climb: null });
-  ST.quests = {}; ST.disc = {}; ST.scrolls = {}; ST.flags = {}; ST.unlocks = {}; ST.fog.fill(0); ST.track = 'main1'; ST.counts.maki = new Set(); ST.counts.parry = 0; ST.rest = { x: 0, z: -72 };
-  for (const it of W.interact) { if (it.kind === 'rouleau') { it.taken = false; it.mesh.visible = true; it.glow.visible = true; } if (it.kind === 'toro') { it.lit = false; it.light.intensity = 0; it.glow.material.opacity = 0; } }
+  Object.assign(pl, { hp: 100, hpMax: 100, en: 30, level: 1, xp: 0, sp: 0, skills: {}, ryo: 40, inv: { onigiri: 2, the: 1 }, special: false, ult: false, lock: null, dead: false, combo: 0, action: null, climb: null, oxygen: 100, inWater: false, submerged: false, buffs: {}, gear: { lame: 0, armure: 0, bottes: 0 }, blessings: 0, char: 'sora' });
+  setCharacter('sora'); pl.hpMax = hpMaxOf(pl); pl.hp = pl.hpMax; pl.en = 30; pl.lock = null;
+  ST.quests = {}; ST.disc = {}; ST.scrolls = {}; ST.flags = {}; ST.unlocks = {}; ST.track = 'main1';
+  ST.seals = {}; ST.chars = { sora: true }; ST.relics = {}; ST.braziers = {}; ST.bowed = {}; ST.altars = {}; ST.ended = false;
+  ST.fog.fill(0); ST.counts.maki = new Set(); ST.counts.parry = 0; ST.counts.kills = {}; ST.rest = { x: 0, z: -72 };
+  for (const it of W.interact) {
+    if (it.kind === 'rouleau') { it.taken = false; it.mesh.visible = true; it.glow.visible = true; }
+    if (it.kind === 'toro') { it.lit = false; it.light.intensity = 0; it.glow.material.opacity = 0; }
+    if (it.kind === 'relic') { it.taken = false; if (it.mesh) it.mesh.visible = true; if (it.glow) it.glow.visible = true; }
+    if (it.kind === 'brazier') { it.lit = false; if (it.mesh) it.mesh.visible = false; if (it.glow) it.glow.material.opacity = 0; }
+  }
   const camp = W.pois.find(p => p.id === 'camp'); if (camp) camp.hidden = true;
+  W.underwater = false; W.weather.target = 'clair'; W.weather.t = 0; W.weather.next = 180;
   G.training = false; W.time = 6.3; resetNPCs();
 }
 function enterPlay() { closePanel(); showTitle(false); G.camOverride = null; G.mode = 'play'; G.cam.yaw = G.pl.yaw; G.cam.pitch = 0.22; clearTaps(); }
 function newGame() {
   audioInit(); resetGame(); enterPlay(); cine(true); music('aube'); introCut();
-  showHelp('<b>ZQSD</b> se déplacer · <b>Souris</b> caméra (clic pour la capturer, Échap la libère)<br><b>Maj</b> courir · <b>Espace</b> sauter, esquiver en combat · <b>E</b> parler, agir<br><b>Clic gauche</b> attaque rapide · <b>Clic droit</b> attaque lourde · <b>F</b> garde et parade<br><b>Tab</b> verrouiller une cible · <b>M</b> carte · <b>J</b> journal · <b>Échap</b> pause', 40);
+  showHelp('<b>ZQSD</b> se déplacer · <b>Souris</b> caméra (clic pour capturer, Échap libère)<br><b>Maj</b> courir · <b>Espace</b> sauter, esquiver en combat · <b>E</b> parler, agir<br><b>Clic gauche</b> attaque rapide · <b>Clic droit</b> attaque lourde · <b>F</b> garde et parade<br><b>Espace</b> nager en surface · <b>Ctrl / C</b> plonger : ton souffle est compté<br><b>Tab</b> verrouiller · <b>M</b> carte · <b>J</b> journal · <b>I</b> inventaire · <b>Échap</b> pause<br>Dix dojos t\'attendent. Certains mots anciens, tapés en jeu, réveillent des bénédictions…', 46);
 }
 function continueGame() { const d = readSave(); if (!d) return; audioInit(); resetGame(); applySave(d); enterPlay(); toast('Partie chargée'); }
 function training() {
@@ -116,12 +127,13 @@ function menuAction(a) {
   if (a === 'account') openAccount();
 }
 document.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-b],[data-g],[data-p],[data-track],[data-use],[data-skill]'); if (!t) return; S.ui();
+  const t = e.target.closest('[data-b],[data-g],[data-p],[data-track],[data-use],[data-skill],[data-char]'); if (!t) return; S.ui();
   if (t.dataset.b === 'logout') { signOut(); return; }
   if (t.dataset.b) { if (t.dataset.b === 'title') closePanel(); else if (t.dataset.b === 'newgo') newGame(); else if (t.dataset.b === 'pause') { closePanel(); } return; }
   if (t.dataset.p) return pauseAction(t.dataset.p);
   if (t.dataset.track) { ST.track = t.dataset.track; pauseTab('journal'); return; }
   if (t.dataset.use) { useItem(t.dataset.use); pauseTab('inv'); return; }
+  if (t.dataset.char) { const id = t.dataset.char; if (!ST.chars[id]) return toast('Ce combattant se débloque dans l\'histoire.'); setCharacter(id); save(true); if (UI.pauseTab === 'look') pauseTab('look'); else openPanel('perso', document.getElementById('pbox').dataset.ctx || 'title'); return; }
   if (t.dataset.skill) { buySkill(t.dataset.skill); pauseTab('skills'); return; }
   if (t.dataset.g) option(t.dataset.g, t.dataset.v, t);
 });
@@ -155,11 +167,20 @@ G.on('cut', (on) => { cine(on); if (!on) subs(''); });
 G.on('lore', (L) => lore(L));
 G.on('defeat', () => { fade(true, '敗', 'Tu t\'effondres… tu reprends conscience au dernier lieu de repos.'); G.mode = 'cutscene'; });
 G.on('respawn', () => { fade(false); G.mode = 'play'; G.camOverride = null; });
-G.on('ultimate', () => { canvas.classList.add('bw'); setTimeout(() => canvas.classList.remove('bw'), 1700); });
-G.on('chapterEnd', () => {
-  G.mode = 'cutscene'; fade(true, '第一章 · FIN DU CHAPITRE 1', 'Tenue « Kage » débloquée. Les six autres régions ne sont pas encore construites : tu peux continuer à explorer Sakura Valley.');
-  setTimeout(() => { fade(false); G.mode = 'play'; save(true); }, 7000);
+G.on('ending', ({ seals }) => {
+  const done = Object.values(ST.quests).filter(q => q.done).length;
+  document.getElementById('ends').textContent = 'Kage a posé sa lame. Les dix dojos se souviennent de ton nom, et le Null n\'est plus qu\'un récit que l\'on se transmet.';
+  document.getElementById('endst').innerHTML = `<span><b>${seals} / 10</b>sceaux</span><span><b>${done}</b>quêtes accomplies</span><span><b>${G.pl.level}</b>niveau</span><span><b>${G.pl.ryo}</b>ryo</span>`;
+  document.getElementById('ending').classList.remove('hide');
+  G.mode = 'pause'; if (document.pointerLockElement) document.exitPointerLock(); save(true);
 });
+document.getElementById('endbtn').addEventListener('click', () => {
+  document.getElementById('ending').classList.add('hide'); titleSetup(); showTitle(true); refreshMenu(hasSave()); music('menu');
+});
+G.on('ultimate', () => { canvas.classList.add('bw'); setTimeout(() => canvas.classList.remove('bw'), 1700); });
+G.on('chapterEnd', () => { toast('Chapitre 1 terminé · les neuf autres dojos sont ouverts', 'gold'); });
+G.on('region', (reg) => { toast(reg.kanji + '  ·  ' + reg.name, 'place'); });
+G.on('seal', ({ reg, count }) => { const seal = (reg.chapter && reg.chapter.seal) || 'Vent'; toast('Sceau du ' + seal + '  ·  ' + count + ' / 10', 'gold'); });
 G.on('rest', (o) => {
   const go = (h) => () => { fade(true, '休', 'Le temps passe…'); G.mode = 'cutscene'; setTimeout(() => { W.time = h; G.pl.hp = G.pl.hpMax; G.pl.en = Math.max(G.pl.en, 50); fade(false); G.mode = 'play'; save(true); }, 1600); };
   dialog([{ who: 'Repos', text: 'Te reposer un moment ? Le temps avancera et tu récupéreras toutes tes forces.' }], [{ t: 'Jusqu\'à l\'aube (6 h)', f: go(6) }, { t: 'Jusqu\'à midi', f: go(12) }, { t: 'Jusqu\'au soir (18 h 30)', f: go(18.5) }, { t: 'Jusqu\'à la nuit (22 h)', f: go(22) }, { t: 'Annuler', f: null }]);
@@ -204,6 +225,7 @@ function loop(now) {
   const camPos = camera.position;
   const env = updateWorld(rdt, camPos, scene, renderer, G.mode === 'title' ? camPos : pl.pos, Q, G.inDojo);
   if (W.rayMat) W.rayMat.opacity = env.day * Math.max(0, env.sd.y) * 0.12 * (1 - W.weather.cloud * 0.7);
+  if (env.flash > 0.9 && performance.now() - (G.lastThunder || 0) > 1600) { G.lastThunder = performance.now(); S.thunder(); }
   const T2 = performance.now();
   /* son */
   if (A.on) {
@@ -211,9 +233,10 @@ function loop(now) {
     ambience(rdt, { wind: W.wind, alt: Math.max(0, camPos.y - 5), waterD: rv.d, rain: W.weather.rain, townD: Math.hypot(camPos.x, camPos.z), day: env.day, fallD: Math.hypot(camPos.x + 112, camPos.z + 104), indoor: G.inDojo });
     let want = 'jour';
     if (G.mode === 'title') want = 'menu';
-    else if (ST.flags.duelOn) want = 'duel';
+    else if (G.enemies.some(e => !e.dead && e.aggro && e.nonLethal && e.pos.distanceTo(pl.pos) < 45)) want = 'duel';
     else if (G.enemies.some(e => !e.dead && e.aggro && !e.nonLethal && e.pos.distanceTo(pl.pos) < 25)) want = 'combat';
     else if (G.inDojo) want = 'dojo';
+    else if (G.region) want = MUSIC_BY_REGION[G.region.id] || 'jour';
     else if (Math.hypot(pl.pos.x - W.shrine.x, pl.pos.z - W.shrine.z) < 30) want = 'sanctuaire';
     else { const h = W.time; want = h >= 5 && h < 8.5 ? 'aube' : (h < 17 ? 'jour' : (h < 20 ? 'crepuscule' : 'nuit')); if (h < 5) want = 'nuit'; }
     if (want !== musicWant) { musicWant = want; musicT = want === 'combat' || want === 'duel' || want === 'menu' ? 0.2 : 3; }
@@ -228,7 +251,7 @@ function loop(now) {
 }
 
 /* points d'entrée pour les tests automatisés */
-window.KAGE = { G, W, ST, QUESTS, newGame, continueGame, training, save, startQuest, spawnEnemy, setTime: (h) => { W.time = h; }, weather: (k) => { W.weather.target = k; W.weather.t = 0; }, menuAction, pauseAction, option, info: () => ({ mode: G.mode, fps: G.fps, pos: G.pl && [G.pl.pos.x.toFixed(1), G.pl.pos.y.toFixed(1), G.pl.pos.z.toFixed(1)], hp: G.pl && G.pl.hp, quest: ST.quests.main1, enemies: G.enemies.length, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }) };
+window.KAGE = { G, W, ST, QUESTS, REGIONS, CHARS, newGame, continueGame, training, save, startQuest, spawnEnemy, setCharacter, setTime: (h) => { W.time = h; }, weather: (k) => { W.weather.target = k; W.weather.t = 0; }, teleport: (id) => { const r = REGIONS.find(x => x.id === id); if (r) { G.pl.pos.set(r.gatePos.x, groundAt(r.gatePos.x, r.gatePos.z, 99).h, r.gatePos.z); G.pl.vel.set(0, 0, 0); } }, menuAction, pauseAction, option, info: () => ({ mode: G.mode, fps: G.fps, pos: G.pl && [G.pl.pos.x.toFixed(1), G.pl.pos.y.toFixed(1), G.pl.pos.z.toFixed(1)], hp: G.pl && G.pl.hp, oxygen: G.pl && G.pl.oxygen, region: G.region && G.region.id, seals: sealsCount(ST.seals), quest: ST.quests.main1, enemies: G.enemies.length, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }) };
 boot();
 
 /* ---------- compte en ligne ---------- */

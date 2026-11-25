@@ -12,6 +12,15 @@ export const OUTFITS = {
   cendre: { name: 'Cendre', top: '#5a5652', inner: '#1c1b1a', hakama: '#2e2c2a', obi: '#b08a3e', accent: '#b08a3e', pattern: 'asanoha', pat: 'rgba(0,0,0,0.15)' },
   kage:   { name: 'Kage (débloquée au chapitre 1)', top: '#0c0c0e', inner: '#5a5f68', hakama: '#09090b', obi: '#c8ccd2', accent: '#c8ccd2', pattern: 'seigaiha', pat: 'rgba(200,204,210,0.07)', locked: 'kage' },
   hana:   { name: 'Disciple de Hana (débloquée en mission)', top: '#f1e9dc', inner: '#9e2c22', hakama: '#9e2c22', obi: '#1c1b1a', accent: '#9e2c22', pattern: 'dots', pat: 'rgba(158,44,34,0.18)', locked: 'hana' },
+  kuro:   { name: 'Ombre de Kuro', top: '#15161c', inner: '#2f3440', hakama: '#101116', obi: '#8c2c2c', accent: '#8c2c2c', pattern: 'seigaiha', pat: 'rgba(140,44,44,0.16)' },
+  tetsu:  { name: 'Acier de Tetsu', top: '#3d4856', inner: '#c9d3dc', hakama: '#26303b', obi: '#b08a3e', accent: '#b08a3e', pattern: 'asanoha', pat: 'rgba(176,138,62,0.14)' },
+  akane:  { name: 'Écarlate', top: '#7b1d1d', inner: '#f0dfc5', hakama: '#3a1515', obi: '#d8b060', accent: '#d8b060', pattern: 'dots', pat: 'rgba(216,176,96,0.18)' },
+  nagi:   { name: 'Eau de Nagi', top: '#2a5560', inner: '#e6eee8', hakama: '#1e3a44', obi: '#cfe4e2', accent: '#cfe4e2', pattern: 'seigaiha', pat: 'rgba(207,228,226,0.15)' },
+  hisui:  { name: 'Jade', top: '#2d5a44', inner: '#dfe8d2', hakama: '#1f3a2c', obi: '#c9d8a8', accent: '#c9d8a8', pattern: 'asanoha', pat: 'rgba(201,216,168,0.14)' },
+  yuki:   { name: 'Neige', top: '#dfe6ec', inner: '#8fb6cd', hakama: '#4a5f70', obi: '#a8c8d8', accent: '#a8c8d8', pattern: 'dots', pat: 'rgba(143,182,205,0.2)' },
+  raiden: { name: 'Foudre', top: '#3a2f5c', inner: '#e8e2f0', hakama: '#241d3a', obi: '#c9a45c', accent: '#c9a45c', pattern: 'stripe', pat: 'rgba(201,164,92,0.18)' },
+  tsuki:  { name: 'Lune', top: '#454b63', inner: '#eef0f6', hakama: '#2a2e3d', obi: '#d8dce8', accent: '#d8dce8', pattern: 'seigaiha', pat: 'rgba(216,220,232,0.13)' },
+  mugen:  { name: 'Vide', top: '#0e0e10', inner: '#d8d4c8', hakama: '#08080a', obi: '#e8e4da', accent: '#e8e4da', pattern: 'asanoha', pat: 'rgba(232,228,218,0.1)' },
 };
 export const HAIRS = { chignon: 'Chignon', queue: 'Queue de cheval', court: 'Court', capuche: 'Capuche de ninja' };
 
@@ -38,6 +47,8 @@ export const P = {
   talk: pose({ spine: [0.04, 0, 0], shR: [-0.5, 0.3, -0.2], elR: [-1.3, 0, 0], hnR: [0, 0, 0.4], shL: [0.05, 0, 0.12], elL: [-0.2, 0, 0] }),
   sweep: pose({ spine: [0.35, 0, 0], shL: [-0.7, 0.3, 0.2], shR: [-0.5, -0.2, -0.1], elL: [-0.5, 0, 0], elR: [-0.9, 0, 0], thL: [-0.2, 0, 0.05], knL: [0.25, 0, 0], thR: [0.1, 0, -0.05], knR: [0.2, 0, 0] }),
   ko: pose({ y: -0.6, rx: 0.05, spine: [0.6, 0, 0], head: [0.4, 0, 0], shL: [-0.1, 0, 0.2], shR: [-0.2, 0, -0.2], thL: [-1.6, 0, 0.1], knL: [2.4, 0, 0], thR: [-1.0, 0, -0.1], knR: [1.8, 0, 0] }),
+  swim: pose({ rx: 1.32, y: 0.25, spine: [-0.22, 0, 0], chest: [-0.05, 0, 0], head: [0.35, 0, 0], shL: [-2.45, 0, 0.32], shR: [-2.45, 0, -0.32], elL: [-0.7, 0, 0], elR: [-0.7, 0, 0], thL: [0.22, 0, 0.06], knL: [0.28, 0, 0], ftL: [-0.4, 0, 0], thR: [0.22, 0, -0.06], knR: [0.28, 0, 0], ftR: [-0.4, 0, 0] }),
+  kneel: pose({ y: -0.55, rx: 0.12, spine: [0.3, 0, 0], head: [0.1, 0, 0], shL: [-0.5, 0, 0.2], shR: [-0.7, 0, -0.2], elL: [-0.8, 0, 0], elR: [-0.9, 0, 0], thL: [-1.5, 0, 0.1], knL: [2.1, 0, 0], thR: [0.2, 0, -0.1], knR: [1.2, 0, 0] }),
 };
 /* attaques : images clés (t en fraction), fenêtre active, portée, dégâts */
 const K = (t, o) => ({ t, p: pose(o) });
@@ -194,6 +205,8 @@ export class Actor {
     if (o.kasa) { const k = add(H, new THREE.ConeGeometry(0.34, 0.16, 24, 1, true), kasaM, 0, 0.24, 0); k.rotation.x = 0.05; add(H, new THREE.ConeGeometry(0.34, 0.16, 24), kasaM, 0, 0.238, 0).scale.set(0.98, 0.95, 0.98); }
     if (o.scarf) { add(j.neck, new THREE.TorusGeometry(0.075, 0.03, 8, 18), accM, 0, 0.01, 0, Math.PI / 2); if (o.chains) for (const sx of [-1, 1]) { const c = new Chain(this.scene, 8, 0.1, 0.045, accM); c.attach = () => this.wpos(j.neck, sx * 0.03, 0.0, -0.08); c.side = 'y'; this.chains.push(c); } }
     if (o.beard) add(H, new THREE.ConeGeometry(0.05, 0.12, 8), mat('beard', () => new THREE.MeshStandardMaterial({ color: '#c9c4ba', roughness: 0.9 })), 0, 0.0, 0.07, Math.PI);
+    if (o.horns) for (const sx of [-1, 1]) { const hn = add(H, new THREE.ConeGeometry(0.022, 0.16, 6), mat('horn', () => new THREE.MeshStandardMaterial({ color: '#e6ddc8', roughness: 0.4 })), sx * 0.065, 0.21, 0.01, 0, 0, sx * 0.35); hn.scale.set(1, 1.2, 1); }
+    if (o.hat) { const hm = mat('hat' + o.hat, () => new THREE.MeshStandardMaterial({ color: o.hat, roughness: 0.85, side: THREE.DoubleSide })); const k2 = add(H, new THREE.ConeGeometry(0.3, 0.12, 18, 1, true), hm, 0, 0.25, 0); k2.rotation.x = 0.04; }
     /* sabre et fourreau */
     if (o.sword) {
       j.saya = G(j.hips, 0.17, 0.05, 0.08); j.saya.rotation.set(1.95, 0.25, 0.15);
@@ -270,6 +283,12 @@ export class Actor {
     if (st.air) mix(base, base, P.jump, clamp(0.6 + st.vy * -0.05, 0.3, 1));
     if (st.landT > 0) mix(base, base, P.land, clamp(st.landT / 0.25, 0, 1) * 0.8);
     if (st.climb) { mix(base, base, P.climb, 1); const s1 = Math.sin(st.climbPh || 0); base[J.indexOf('shL') * 3] += s1 * 0.5; base[J.indexOf('shR') * 3] -= s1 * 0.5; base[J.indexOf('thL') * 3] += s1 * 0.5; base[J.indexOf('thR') * 3] -= s1 * 0.5; }
+    if (st.swim) { mix(base, base, P.swim, clamp(st.swim, 0, 1)); const s1 = Math.sin(ph * 1.1), s2 = Math.cos(ph * 1.1), sw = clamp(st.swim, 0, 1);
+      base[J.indexOf('shL') * 3] += s1 * 0.85 * sw; base[J.indexOf('shR') * 3] -= s1 * 0.85 * sw;
+      base[J.indexOf('elL') * 3] += (0.4 + Math.max(0, s2) * 0.5) * sw; base[J.indexOf('elR') * 3] += (0.4 + Math.max(0, -s2) * 0.5) * sw;
+      base[J.indexOf('thL') * 3] += s2 * 0.3 * sw; base[J.indexOf('thR') * 3] -= s2 * 0.3 * sw;
+      base[J.indexOf('spine') * 3] += Math.sin(ph * 1.1 + 0.6) * 0.18 * sw; }
+    if (st.kneel) mix(base, base, P.kneel, st.kneel);
     if (st.block) mix(base, base, P.block, st.block);
     /* action par-dessus */
     let target = base;

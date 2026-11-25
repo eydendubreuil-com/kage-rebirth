@@ -213,6 +213,15 @@ export const T = {
       for (let p = 0; p < 5; p++) { const pa = -1.57 + (p - 2) * 0.6; g.lineTo(x + Math.cos(pa) * s, y + Math.sin(pa) * s); g.lineTo(x + Math.cos(pa + 0.3) * s * 0.4, y + Math.sin(pa + 0.3) * s * 0.4); }
       g.fill(); }
   }),
+  foliage: () => canvasTex('foliage', 256, 256, (g, w, h) => {
+    const r = mulberry32(57); g.clearRect(0, 0, w, h);
+    for (let k = 0; k < 260; k++) {
+      const a = r() * 6.28, d = Math.pow(r(), 0.65) * 112, x = 128 + Math.cos(a) * d, y = 128 + Math.sin(a) * d, s = 5 + r() * 10;
+      g.fillStyle = `hsl(${96 + r() * 34},${38 + r() * 24}%,${34 + r() * 24}%)`;
+      g.beginPath(); g.ellipse(x, y, s, s * 0.55, r() * 3, 0, Math.PI * 2); g.fill();
+    }
+    for (let k = 0; k < 60; k++) { g.fillStyle = `rgba(255,255,255,${0.05 + r() * 0.12})`; g.beginPath(); g.arc(r() * w, r() * h, 1 + r() * 3, 0, 7); g.fill(); }
+  }),
   bambooLeaf: () => canvasTex('bambooLeaf', 128, 128, (g, w, h) => {
     const r = mulberry32(59); g.clearRect(0, 0, w, h);
     for (let k = 0; k < 70; k++) { const x = r() * w, y = r() * h, a = r() * 6.28; g.fillStyle = `hsl(${85 + r() * 25},${40 + r() * 25}%,${28 + r() * 18}%)`;

@@ -78,15 +78,18 @@ export const S = {
     env(g, t, 0.01, 0.025, 0.4); o.connect(g); g.connect(A.ambG); o.start(t); o.stop(t + 0.5); },
   cricket() { if (!S.ok()) return; const C = A.ctx, t = C.currentTime; for (let k = 0; k < 4; k++) { const o = C.createOscillator(), g = C.createGain(); o.frequency.value = 4400; env(g, t + k * 0.06, 0.005, 0.012, 0.03); o.connect(g); g.connect(A.ambG); o.start(t + k * 0.06); o.stop(t + k * 0.06 + 0.05); } },
   meow() { if (!S.ok()) return; tone(700, 'sawtooth', 0.04, 0.05, 0.3, 450); },
+  splash(p = 1) { if (!S.ok()) return; noiseBurst(1200, 0.7, 'bandpass', 0.28 * p, 0.01, 0.35, 1.3); tone(180, 'sine', 0.1 * p, 0.01, 0.25, 90); },
+  bubble() { if (!S.ok()) return; for (let k = 0; k < 5; k++) setTimeout(() => S.ok() && tone(320 + Math.random() * 500, 'sine', 0.05, 0.005, 0.09, 180 + Math.random() * 300), k * 90); },
+  thunder() { if (!S.ok()) return; noiseBurst(180, 0.5, 'lowpass', 0.55, 0.02, 2.4, 0.5); tone(48, 'sine', 0.3, 0.02, 2.2, 28); },
 };
 /* ambiance continue, réglée à chaque image */
 let birdT = 0, crT = 0;
 export function ambience(dt, o) {
   if (!S.ok()) return; const t = A.ctx.currentTime;
   const set = (n, v) => A.amb[n].g.gain.setTargetAtTime(v, t, 0.4);
-  set('wind', 0.05 + o.wind * 0.06 + o.alt * 0.002); set('water', Math.max(0, 1 - o.waterD / 30) * 0.18); set('rain', o.rain * 0.22);
+  set('wind', (o.under ? 0.02 : 0.05 + o.wind * 0.06) + o.alt * 0.002 + (o.snow || 0) * 0.03); set('water', (o.under ? 0.34 : Math.max(0, 1 - o.waterD / 30) * 0.18)); set('rain', o.rain * 0.22 + (o.snow || 0) * 0.05);
   set('town', Math.max(0, 1 - o.townD / 60) * 0.035 * o.day); set('fall', Math.max(0, 1 - o.fallD / 60) * 0.3);
-  A.wet.gain.setTargetAtTime(o.indoor ? 0.45 : 0.1, t, 0.3);
+  A.wet.gain.setTargetAtTime(o.under ? 0.75 : (o.indoor ? 0.45 : 0.1), t, 0.3);
   birdT -= dt; if (birdT < 0) { birdT = 0.8 + Math.random() * 4; if (o.day > 0.5 && o.rain < 0.3 && !o.indoor) S.bird(); }
   crT -= dt; if (crT < 0) { crT = 0.4 + Math.random() * 1.5; if (o.day < 0.3 && o.rain < 0.3) S.cricket(); }
 }

@@ -1,7 +1,8 @@
 /* KAGE: REBIRTH — cœur du jeu : contrôles, caméra, déplacements, combat, ennemis, habitants */
 import * as THREE from 'three';
-import { W, groundAt, terrainH, inWater, roadDist } from './world.js';
+import { W, groundAt, terrainH, inWater, waterInfo, roadDist, MAP } from './world.js';
 import { Actor, MOVES, Cat, OUTFITS } from './actor.js';
+import { CHARS, GEAR, regionOf } from './regions.js';
 import { S } from './audio.js';
 import { clamp, lerp, damp, dampAngle, angDiff, rr, R, T } from './util.js';
 
@@ -10,6 +11,7 @@ export const G = {
   settings: { sens: 1, invertY: false, quality: 'moyenne', res: 1, fpsCap: 0, sub: true, hud: true },
   enemies: [], npcs: [], cats: [], fx: [], listeners: {}, combatT: 0, dummiesHit: 0, msg: [], cam: null, camOverride: null, training: false,
   on(n, f) { (this.listeners[n] = this.listeners[n] || []).push(f); }, emit(n, d) { for (const f of this.listeners[n] || []) f(d); },
+  secretBuf: '', konami: [], lastSecret: '', zone: null,
 };
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const _a = V(), _b = V(), _c = V(), _ray = new THREE.Ray(), _box = new THREE.Box3();
@@ -21,6 +23,16 @@ export function initInput(canvas) {
     if (e.repeat) { if (['Tab', 'Space'].includes(e.code)) e.preventDefault(); return; }
     k[e.code] = true; G.taps[e.code] = true;
     if (['Tab', 'Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
+    /* commandes secrètes : lettres tapées hors dialogue, plus le code Konami */
+    if (G.mode === 'play' && !G.locked) {
+      if (e.key && e.key.length === 1 && /[a-z]/i.test(e.key)) {
+        G.secretBuf = (G.secretBuf + e.key.toLowerCase()).slice(-14);
+        G.emit('keys', G.secretBuf);
+      }
+      const KSEQ = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
+      G.konami.push(e.code); if (G.konami.length > KSEQ.length) G.konami.shift();
+      if (G.konami.join(',') === KSEQ.join(',')) { G.konami = []; G.emit('konami'); }
+    }
   });
   addEventListener('keyup', (e) => { k[e.code] = false; });
   addEventListener('blur', () => { for (const c in k) k[c] = false; G.mouse.l = G.mouse.r = false; });
@@ -44,6 +56,17 @@ export function clearTaps() { G.taps = {}; }
 
 /* ============================ COLLISIONS ============================ */
 export function collide(p, r, feet, h = 1.7) {
+  /* troncs, rochers et poteaux : indexés par cellules pour rester fluides */
+  if (W.circleGrid && W.circleGrid.size) {
+    const gx = Math.floor(p.x / 16), gz = Math.floor(p.z / 16);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      const arr = W.circleGrid.get((gx + i) + ',' + (gz + j)); if (!arr) continue;
+      for (const c of arr) {
+        const dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz), rad = r + c.r;
+        if (d < rad && d > 1e-4) { p.x += dx / d * (rad - d); p.z += dz / d * (rad - d); }
+      }
+    }
+  }
   for (const c of W.colliders) {
     if (feet >= c.y1 - 0.05 || feet + h <= c.y0) continue;
     if (p.x < c.x0 - r || p.x > c.x1 + r || p.z < c.z0 - r || p.z > c.z1 + r) continue;
@@ -130,14 +153,28 @@ class Fighter {
 
 /* ============================ JOUEUR ============================ */
 export function createPlayer(scene, look) {
-  const actor = new Actor(scene, Object.assign({ outfit: 'encre', hair: 'chignon', skin: 0, scarf: true, band: true }, look || {}));
+  const C = CHARS.sora;
+  const actor = new Actor(scene, Object.assign({ outfit: 'encre', hair: 'chignon', skin: 0, scarf: true, band: true }, C.look, look || {}));
   const pl = new Fighter(actor, W.spawn.x, W.spawn.z);
-  Object.assign(pl, { en: 30, level: 1, xp: 0, sp: 0, skills: {}, ryo: 40, inv: { onigiri: 2, the: 1 }, lock: null, drawnT: 0, climb: null, climbPh: 0, combo: 0, comboT: 0, special: false, ult: false, dashCD: 0, isPlayer: true, look: actor.o });
+  Object.assign(pl, { en: 30, level: 1, xp: 0, sp: 0, skills: {}, ryo: 40, inv: { onigiri: 2, the: 1 }, lock: null, drawnT: 0, climb: null, climbPh: 0, combo: 0, comboT: 0, special: false, ult: false, dashCD: 0, isPlayer: true, look: actor.o,
+    char: 'sora', gear: { lame: 0, armure: 0, bottes: 0 }, blessings: 0, buffs: {}, oxygen: 100, inWater: false, submerged: false, swim: 0, unlockChars: { sora: true } });
   pl.yaw = Math.PI;
   G.pl = pl; return pl;
 }
+export const charOf = (pl) => CHARS[pl.char] || CHARS.sora;
+export const gearOf = (pl, k) => GEAR[k].tiers[Math.min(GEAR[k].tiers.length - 1, (pl.gear && pl.gear[k]) || 0)];
+export function dmgMul(pl) { return 1 + (pl.level - 1) * 0.06 + (gearOf(pl, 'lame').dmg - 1) + (charOf(pl).dmg - 1) + (pl.buffs?.might ? 0.5 : 0); }
+export function speedMul(pl) { return charOf(pl).speed * gearOf(pl, 'bottes').speed * (pl.buffs?.speed ? 2 : 1); }
+export function enMul(pl) { return charOf(pl).en; }
+export function hpMaxOf(pl) { return Math.round((100 + (pl.level - 1) * 10 + (pl.skills?.vitalite ? 25 : 0) + gearOf(pl, 'armure').hp + (pl.blessings || 0) * 5) * charOf(pl).hp); }
 export function setLook(look) { const pl = G.pl; pl.actor.setOutfit(look); pl.look = pl.actor.o; if (pl.actor.swordDrawn) pl.actor.sheathe(false); }
-export function hpMaxOf(pl) { return 100 + (pl.level - 1) * 10 + (pl.skills.vitalite ? 25 : 0); }
+export function setCharacter(id) {
+  const C = CHARS[id]; if (!C || !G.pl) return false;
+  const pl = G.pl; pl.char = id; pl.actor.setOutfit(Object.assign({}, C.look)); pl.look = pl.actor.o;
+  pl.hpMax = hpMaxOf(pl); pl.hp = Math.min(pl.hp, pl.hpMax); pl.en = Math.min(pl.en, 100 * enMul(pl));
+  if (pl.actor.swordDrawn) pl.actor.sheathe(false);
+  return true;
+}
 
 function inCombat() { return G.enemies.some(e => !e.dead && e.aggro && e.pos.distanceTo(G.pl.pos) < 22); }
 
@@ -150,8 +187,17 @@ function playerUpdate(dt, rdt) {
   const fwd = V(Math.sin(cam.yaw), 0, Math.cos(cam.yaw)), right = V(-Math.cos(cam.yaw), 0, Math.sin(cam.yaw));
   const want = V().addScaledVector(fwd, iz).addScaledVector(right, ix);
   const fighting = inCombat(); if (fighting) G.combatT = 4; else G.combatT -= dt;
+  /* eau : nage, apnée, noyade */
+  const wi = waterInfo(pl.pos.x, pl.pos.z);
+  const wy = wi ? wi.y : null;
+  const wasWet = pl.inWater;
+  pl.inWater = wy !== null && pl.pos.y < wy - 0.22;
+  pl.waterY = wy;
+  if (pl.inWater && !wasWet) { S.splash(); ring(V(pl.pos.x, wy + 0.04, pl.pos.z), '#cfe4ea', 1.4); notify('Tu nages. Espace pour remonter, Ctrl ou C pour plonger.', 'place'); sparks(V(pl.pos.x, wy + 0.05, pl.pos.z), 18, '#d8eef4', 3); }
+  else if (!pl.inWater && wasWet) { S.splash(0.4); }
   pl.timers = pl.timers || 0;
   for (const t of ['hurtT', 'downT', 'dashT', 'landT', 'inv', 'comboT', 'dashCD', 'stagger']) pl[t] = Math.max(0, pl[t] - dt);
+  if (pl.buffs) for (const b in pl.buffs) pl.buffs[b] = Math.max(0, pl.buffs[b] - dt);
   pl.parryT += dt;
 
   /* verrouillage d'une cible */
@@ -179,7 +225,7 @@ function playerUpdate(dt, rdt) {
   if (pl.blockHeld && !pl.actor.swordDrawn) { pl.actor.sheathe(false); S.draw(); }
 
   /* attaques */
-  if (canMove && pl.downT <= 0 && pl.hurtT <= 0) {
+  if (canMove && pl.downT <= 0 && pl.hurtT <= 0 && !pl.inWater) {
     const atk = tap('LMB'), hv = tap('RMB');
     if (atk || hv) G.combatT = Math.max(G.combatT, 3);
     if (pl.action) {
@@ -205,7 +251,7 @@ function playerUpdate(dt, rdt) {
 
   /* esquive (ESPACE en combat) ou saut */
   const space = canMove && tap('Space');
-  if (space) {
+  if (space && !pl.inWater) {
     if ((G.combatT > 0 || pl.lock) && pl.dashCD <= 0 && !pl.action && pl.downT <= 0) {
       pl.dashT = 0.42; pl.inv = pl.skills.vent ? 0.42 : 0.32; pl.dashCD = pl.skills.vent ? 0.45 : 0.7;
       pl.dashDir = il > 0.1 ? want.clone().normalize() : pl.facing().multiplyScalar(-1); S.dash();
@@ -215,21 +261,40 @@ function playerUpdate(dt, rdt) {
 
   /* déplacement */
   const stance = (G.combatT > 0 || pl.lock || pl.blockHeld) && pl.actor.swordDrawn;
-  let spd = stance ? 3.3 : (k.ShiftLeft || k.ShiftRight ? 7.6 : 4.7);
-  if (k.AltLeft || k.KeyC) spd = 1.8;
-  if (pl.surf === 'eau' && pl.waterY !== null && pl.waterY - pl.pos.y > 0.4) spd *= 0.5;
+  let spd = (stance ? 3.3 : (k.ShiftLeft || k.ShiftRight ? 7.6 : 4.7)) * speedMul(pl);
+  if (pl.inWater) spd = (k.ShiftLeft || k.ShiftRight ? 3.9 : 2.7) * speedMul(pl);
+  else if (k.AltLeft) spd = 1.8;
   if (pl.blockHeld) spd *= 0.45;
   const tv = want.clone().multiplyScalar(spd * (canMove ? 1 : 0));
   if (pl.action) { const mv = MOVES[pl.action.move], u = pl.action.t / mv.dur; tv.set(0, 0, 0);
     if (u < 0.55) { let lg = mv.lunge * (1 - u / 0.55) * 1.6; const tg = pl.lock || nearestEnemy(pl, 2.2) || dummies().find(d => d.pos.distanceTo(pl.pos) < 1.6); if (tg && tg.pos.distanceTo(pl.pos) < 1.6) lg *= 0.1; tv.addScaledVector(pl.facing(), lg); } }
   if (pl.dashT > 0) tv.copy(pl.dashDir).multiplyScalar(11 * (pl.dashT / 0.42) + 2);
   if (pl.hurtT > 0 || pl.downT > 0) tv.copy(pl.vel).multiplyScalar(0.9);
-  const acc = pl.onGround ? (pl.action || pl.dashT > 0 ? 30 : 11) : 3;
+  const acc = pl.inWater ? 5 : (pl.onGround ? (pl.action || pl.dashT > 0 ? 30 : 11) : 3);
   pl.vel.x = damp(pl.vel.x, tv.x, acc, dt); pl.vel.z = damp(pl.vel.z, tv.z, acc, dt);
   pl.pos.x += pl.vel.x * dt; pl.pos.z += pl.vel.z * dt;
   collide(pl.pos, pl.radius, pl.pos.y); for (const e of G.enemies) if (!e.dead) sep(pl, e, 0.8); for (const n of G.npcs) if (n.actor.root.visible) sep(pl, n, 0.7, true);
-  const r = Math.hypot(pl.pos.x, pl.pos.z); if (r > 238) { pl.pos.x *= 238 / r; pl.pos.z *= 238 / r; if (!pl.edgeT || performance.now() - pl.edgeT > 8000) { pl.edgeT = performance.now(); notify('Les montagnes ferment la vallée. Les autres régions ne sont pas encore construites.'); } }
-  pl.ground(dt);
+  const r = Math.hypot(pl.pos.x, pl.pos.z); if (r > 880) { pl.pos.x *= 880 / r; pl.pos.z *= 880 / r; if (!pl.edgeT || performance.now() - pl.edgeT > 8000) { pl.edgeT = performance.now(); notify('Les remparts du monde se perdent dans la brume. Les dix vallées sont devant toi.', 'place'); } }
+  if (pl.inWater) {
+    const g = groundAt(pl.pos.x, pl.pos.z, pl.pos.y + 3);
+    const dive = k.ControlLeft || k.ControlRight || k.KeyC;
+    if (dive) pl.vy = damp(pl.vy, -3.6, 7, dt);
+    else if (k.Space) pl.vy = damp(pl.vy, 3.4, 9, dt);
+    else pl.vy = damp(pl.vy, (wy - 1.25 - pl.pos.y) * 4.5, 6, dt);
+    pl.pos.y += pl.vy * dt;
+    if (pl.pos.y < g.h + 0.05) { pl.pos.y = g.h + 0.05; pl.vy = 0; }
+    if (pl.pos.y > wy - 0.5) { pl.pos.y = wy - 0.5; if (pl.vy > 0) pl.vy = 0; }
+    pl.surf = 'eau'; pl.onGround = false; pl.landT = 0;
+  } else pl.ground(dt);
+  /* apnée */
+  const headY = pl.pos.y + 1.5;
+  pl.submerged = wy !== null && headY < wy - 0.02 && pl.inWater;
+  if (pl.submerged) {
+    pl.oxygen = Math.max(0, pl.oxygen - dt * (k.ShiftLeft ? 5.0 : 3.0));
+    if (pl.oxygen <= 0) { pl.hp -= dt * 15; if (pl.hp <= 0 && !pl.dead) { pl.hp = 0; G.emit('playerDown'); }
+      if (!pl.drownT || performance.now() - pl.drownT > 4500) { pl.drownT = performance.now(); notify('Tu n\'as plus d\'air ! Remonte à la surface !', 'warn'); S.bubble(); } }
+  } else pl.oxygen = Math.min(100, pl.oxygen + dt * 22);
+  W.underwater = !!pl.submerged;
   pl.speed = Math.hypot(pl.vel.x, pl.vel.z);
   /* orientation */
   if (pl.lock && !pl.dashT) pl.yaw = dampAngle(pl.yaw, Math.atan2(pl.lock.pos.x - pl.pos.x, pl.lock.pos.z - pl.pos.z), 14, dt);
@@ -239,7 +304,7 @@ function playerUpdate(dt, rdt) {
   /* rengainer au calme */
   if (pl.actor.swordDrawn && !stance && !pl.action && G.combatT < -3 && !pl.blockHeld) { pl.actor.sheathe(true); S.sheathe(); }
   /* énergie */
-  pl.en = Math.min(100, pl.en + dt * 0.8);
+  pl.en = Math.min(100 * enMul(pl), pl.en + dt * 0.8 * enMul(pl));
   stepAction(pl, dt);
 }
 function faceTarget(f) { const t = f.isPlayer ? (f.lock || nearestEnemy(f, 4)) : null; if (t) f.yaw = Math.atan2(t.pos.x - f.pos.x, t.pos.z - f.pos.z); else if (f.isPlayer) { const cy = G.cam.yaw; const k = G.keys; if (k.KeyW || k.KeyS || k.KeyA || k.KeyD || k.ArrowUp) { /* garde l'orientation de marche */ } } }
@@ -253,7 +318,7 @@ function stepAction(f, dt) {
   const u = a.t / mv.dur;
   if (u >= mv.act[0] && u <= mv.act[1]) {
     if (mv.multi) { a.multiT -= dt; if (a.multiT <= 0) { a.multiT = (mv.act[1] - mv.act[0]) * mv.dur / mv.multi; a.hit.clear(); sparks(f.actor.tipWorld(V()), 6, '#f6c6d3', 3); } }
-    const targets = f.isPlayer ? G.enemies.concat(G.training || G.dummyMode ? dummies() : dummies()) : [G.pl];
+    const targets = f.isPlayer ? G.enemies.concat((G.training || G.inDojo) ? dummies() : []) : [G.pl];
     for (const t of targets) {
       if (a.hit.has(t) || t.dead) continue;
       const dx = t.pos.x - f.pos.x, dz = t.pos.z - f.pos.z, d = Math.hypot(dx, dz);
@@ -290,7 +355,8 @@ export function applyHit(att, tgt, mv, moveName) {
     return;
   }
   let dmg = mv.dmg;
-  if (att.isPlayer) { dmg *= 1 + (att.level - 1) * 0.06; if (att.counter > 0) { dmg *= 2; att.counter = 0; notify('CONTRE-ATTAQUE', 'gold'); } att.combo = att.comboT > 0 ? att.combo + 1 : 1; att.comboT = 2; att.en = Math.min(100, att.en + (att.skills.souffle ? 9 : 7)); }
+  if (att.isPlayer) { dmg *= dmgMul(att); if (att.counter > 0) { dmg *= 2; att.counter = 0; notify('CONTRE-ATTAQUE', 'gold'); } att.combo = att.comboT > 0 ? att.combo + 1 : 1; att.comboT = 2; att.en = Math.min(100, att.en + (att.skills.souffle ? 9 : 7)); }
+  if (tgt.isPlayer && tgt.buffs && tgt.buffs.god > 0) { notify('Bénédiction des kamis', 'gold'); return; }
   if (tgt.isPlayer && G.training) dmg *= 0.5;
   tgt.hp -= dmg; tgt.action = null; tgt.blockHeld = false;
   const kb = att.facing();
@@ -325,14 +391,33 @@ const TYPES = {
   scout: { name: 'Éclaireur', hp: 50, speed: 4.6, block: 0.2, dodge: 0.35, moves: ['e1', 'l1'], look: { outfit: 'encre', hair: 'capuche', mask: true, scarf: true, chains: false }, xp: 25, ryo: [6, 12] },
   akira: { name: 'Akira', hp: 190, speed: 4.0, block: 0.45, dodge: 0.2, moves: ['l1', 'l2', 'l3', 'heavy'], combo: true, look: { outfit: 'indigo', hair: 'queue', band: true, scarf: false, chains: true, hairColor: '#1b1a1e' }, xp: 120, ryo: [0, 0], nonLethal: true },
   sparring: { name: 'Partenaire d\'entraînement', hp: 120, speed: 3.4, block: 0.35, moves: ['e1', 'l2'], look: { outfit: 'sakura', hair: 'court', band: true, scarf: false, chains: false }, xp: 0, ryo: [0, 0], nonLethal: true },
+  oni: { name: 'Oni', hp: 320, speed: 3.2, block: 0.22, moves: ['e2', 'heavy'], scale: 1.45, look: { outfit: 'kuro', hair: 'court', horns: true, beard: true, mask: false, chains: false }, xp: 130, ryo: [45, 80] },
 };
 export function spawnEnemy(type, x, z, opts = {}) {
-  const T0 = TYPES[type]; const actor = new Actor(G.scene, Object.assign({ scale: T0.scale || 1 }, T0.look));
+  const T0 = TYPES[type]; const actor = new Actor(G.scene, Object.assign({ scale: T0.scale || 1 }, T0.look, opts.look || {}));
   const e = new Fighter(actor, x, z); Object.assign(e, { type, T: T0, hpMax: T0.hp, hp: T0.hp, aggro: !!opts.aggro, token: false, ai: { t: rr(0.5, 1.5), orbit: R() < 0.5 ? 1 : -1, tele: 0, next: null, blockT: 0 }, name: opts.name || T0.name, tag: opts.tag, nonLethal: T0.nonLethal || opts.nonLethal, yaw: R() * 6 });
+  if (opts.hp) { e.hpMax = opts.hp; e.hp = opts.hp; }
   if (opts.aggro) actor.sheathe(false);
   G.enemies.push(e); return e;
 }
+/* champion d'un dojo : un maître, non létal, qui cède quand sa vie tombe à zéro */
+export function spawnBoss(reg, tag = 'boss', x, z) {
+  const b = reg.boss, pos = reg.place(x ?? 0, z ?? 0), gy = groundAt(pos.x, pos.z).h;
+  const actor = new Actor(G.scene, Object.assign({ scale: 1 }, reg.bossLook));
+  const e = new Fighter(actor, pos.x, pos.z); e.pos.y = gy;
+  Object.assign(e, { type: 'boss', T: { name: reg.master, hp: b.hp, xp: b.xp, ryo: b.ryo, block: b.block, dodge: b.dodge, speed: b.speed, moves: b.moves, scale: b.scale, combo: true, nonLethal: true },
+    hpMax: b.hp, hp: b.hp, aggro: true, token: true, name: reg.master, tag, nonLethal: true, boss: reg.id, yaw: reg.rot + Math.PI,
+    ai: { t: 1.2, orbit: 1, tele: 0, next: null, blockT: 0 } });
+  actor.sheathe(false); G.enemies.push(e); return e;
+}
+/* hommes de main d'une vallée : même école, même couleur */
+export function spawnRegionFoe(reg, x, z, tag = 'trial') {
+  const type = ['ronin', 'scout', 'brute'][Math.floor(R() * 3)];
+  const look = { outfit: reg.masterLook.outfit, hair: R() < 0.5 ? 'court' : 'chignon', band: false, mask: true, scarf: false, chains: false, sword: true };
+  return spawnEnemy(type, x, z, { tag, aggro: true, look });
+}
 export function clearEnemies(tag) { for (const e of G.enemies.slice()) if (!tag || e.tag === tag) { e.actor.dispose(); G.enemies.splice(G.enemies.indexOf(e), 1); } }
+export function clearAllFoes() { clearEnemies(); }
 function killEnemy(e, by) {
   if (e.nonLethal) { e.hp = 1; e.dead = true; e.yielded = true; e.downT = 0; e.action = null; e.ko = true; G.emit('yield', e); return; }
   e.dead = true; e.deadT = 0; if (G.pl.lock === e) G.pl.lock = null;
@@ -345,7 +430,8 @@ function enemyUpdate(e, dt) {
   e.parryT += dt;
   if (e.dead) { e.deadT = (e.deadT || 0) + dt; e.vel.multiplyScalar(0.9); e.pos.addScaledVector(e.vel, dt); e.ground(dt); return; }
   const dx = pl.pos.x - e.pos.x, dz = pl.pos.z - e.pos.z, d = Math.hypot(dx, dz), toP = Math.atan2(dx, dz);
-  if (!e.aggro && d < (e.type === 'akira' || e.type === 'sparring' ? 30 : 15) && G.mode === 'play') { e.aggro = true; e.actor.sheathe(false); S.draw(); G.emit('aggro', e); }
+  if (e.type === 'boss' && !e.phase2 && e.hp < e.hpMax * 0.45) { e.phase2 = true; e.T.speed *= 1.18; e.stagger = 0; e.emotion = 'colere'; ring(V(e.pos.x, e.pos.y + 1.2, e.pos.z), '#ffffff', 2.2); sparks(V(e.pos.x, e.pos.y + 1.2, e.pos.z), 40, '#e8e4da', 8); S.gong(); notify(e.name + ' change de stance !', 'gold'); }
+  if (!e.aggro && d < (e.type === 'akira' || e.type === 'sparring' || e.type === 'boss' ? 30 : 15) && G.mode === 'play') { e.aggro = true; e.actor.sheathe(false); S.draw(); G.emit('aggro', e); }
   const tv = V();
   if (e.aggro && !e.busy() && e.stagger <= 0 && G.mode === 'play' && !pl.dead) {
     /* au plus deux assaillants à la fois */
@@ -410,7 +496,8 @@ function npcUpdate(n, dt, hour) {
   }
   if (!n.noGround) n.pos.y = groundAt(n.pos.x, n.pos.z, n.pos.y + 0.5).h;
   const dp = n.pos.distanceTo(pl.pos);
-  n.actor.root.visible = !n.hidden && !away && (dp < 80 || G.mode === 'cutscene' || G.mode === 'title');
+  n.actor.root.visible = !n.hidden && !away && (dp < 95 || G.mode === 'cutscene' || G.mode === 'title');
+  if (G.mode === 'play' && dp > 95 && !n.script) { n.bubbleT -= dt; n.actor.root.position.copy(n.pos); return; }
   n.actor.lookAt = dp < 4.5 && n.actor.root.visible ? V(pl.pos.x, pl.pos.y + 1.5, pl.pos.z) : (n.lookTarget || null);
   if (dp < 3.2 && n.bubbleT <= 0 && def.barks && G.mode === 'play' && n.actor.root.visible) { n.bubbleT = rr(18, 30); G.emit('bubble', { n, text: def.barks[Math.floor(R() * def.barks.length)] }); }
   n.bubbleT -= dt;
@@ -456,6 +543,10 @@ export function gameUpdate(rdt) {
   ultUpdate(rdt);
   const pl = G.pl;
   const D = W.dojo; G.inDojo = pl.pos.x > D.x0 && pl.pos.x < D.x1 && pl.pos.z > D.z0 && pl.pos.z < D.z1 && pl.pos.y > D.y - 0.5;
+  let inRegion = null;
+  for (const id in W.regionDojos) { const dj = W.regionDojos[id]; if (Math.hypot(pl.pos.x - dj.x, pl.pos.z - dj.z) < dj.r && Math.abs(pl.pos.y - dj.y) < 8) { G.inDojo = true; } if (Math.hypot(pl.pos.x - dj.reg.x, pl.pos.z - dj.reg.z) < dj.reg.r) inRegion = dj.reg; }
+  G.region = inRegion;
+  if (inRegion && G.zone !== inRegion.id) { G.zone = inRegion.id; G.emit('region', inRegion); }
   const fdt = frozen ? 0 : dt;
   if (G.mode === 'play' || G.mode === 'cutscene' || G.mode === 'dialog') {
     if (G.mode === 'play') playerUpdate(fdt, rdt); else { pl.vel.multiplyScalar(0.8); pl.speed = pl.autoWalk ? pl.autoWalk : 0; if (pl.autoWalk) { pl.pos.addScaledVector(pl.facing(), pl.autoWalk * rdt); pl.ground(rdt); } else pl.ground(rdt); stepAction(pl, fdt); }
@@ -466,7 +557,7 @@ export function gameUpdate(rdt) {
   const act = (f, extra = {}) => {
     f.actor.root.position.copy(f.pos); f.actor.root.rotation.y = f.yaw;
     f.actor.emotion = f.action || f.blockHeld ? 'colere' : (f.hurtT > 0 ? 'surprise' : (f.emotion || 'neutre'));
-    f.actor.animate(fdt, Object.assign({ speed: f.speed, stance: f.actor.swordDrawn && (f.isPlayer ? (G.combatT > 0 || f.lock || f.blockHeld) : f.aggro) ? 'guard' : 'free', air: !f.onGround, vy: f.vy, landT: f.landT, action: f.action, dashT: f.dashT, hurtT: f.hurtT, downT: f.downT > 0 && f.downT < 99 ? Math.min(f.downT, 1) : (f.dead && !f.nonLethal ? 1 : 0), block: f.block, ko: f.ko, climb: !!f.climb, climbPh: f.climbPh, special: f.special2 || null }, extra));
+          f.actor.animate(fdt, Object.assign({ speed: f.speed, stance: f.actor.swordDrawn && (f.isPlayer ? (G.combatT > 0 || f.lock || f.blockHeld) : f.aggro) ? 'guard' : 'free', air: !f.onGround, vy: f.vy, landT: f.landT, action: f.action, dashT: f.dashT, hurtT: f.hurtT, downT: f.downT > 0 && f.downT < 99 ? Math.min(f.downT, 1) : (f.dead && !f.nonLethal ? 1 : 0), block: f.block, ko: f.ko, climb: !!f.climb, climbPh: f.climbPh, swim: f.inWater ? clamp((f.waterY - f.pos.y) / 0.9, 0.25, 1) : 0, special: f.special2 || null }, extra));
   };
   act(pl, { special: pl.pose || null });
   for (const e of G.enemies) { const de = e.pos.distanceTo(pl.pos); e.actor.lod(G.camera.position.distanceTo(e.pos)); if (de < 70) act(e); }
@@ -482,8 +573,10 @@ export function gameUpdate(rdt) {
   for (const n of G.npcs) if (n.actor.chains.length && n.actor.root.visible) n.actor.cloth(rdt, wind);
   updateFx(rdt);
   /* portes du dojo */
-  for (const d of W.doors) { const near = Math.hypot(pl.pos.x - d.x, pl.pos.z - d.z) < 7; d.open = damp(d.open, near ? 1 : 0, 4, rdt); if (d.panels) d.panels.forEach((p) => { p.position.x = p.userData.x0 + p.userData.dx * d.open; }); }
-  /* collisions des portes : fermées = mur */
-  if (W.doorCol) { W.doorCol.y1 = W.doors[0].open > 0.6 ? W.doorCol.y0 - 1 : W.doorCol.y0 + 6; }
+  for (const d of W.doors) {
+    const near = Math.hypot(pl.pos.x - d.x, pl.pos.z - d.z) < 7; d.open = damp(d.open, near ? 1 : 0, 4, rdt);
+    if (d.panels) d.panels.forEach((p) => { const u = p.userData; if (u.ax !== undefined) { p.position.x = u.ax + u.dx * d.open; p.position.z = u.az + u.dz * d.open; } else { p.position.x = u.x0 + u.dx * d.open; } });
+    if (d.col) d.col.y1 = d.open > 0.6 ? d.col.y0 - 1 : d.col.y0 + 6;
+  }
   return dt;
 }

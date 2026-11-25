@@ -4,6 +4,7 @@ import { G, setLook, hpMaxOf } from './game.js';
 import { W } from './world.js';
 import { ST, QUESTS, curStep, activeTarget, dialogNext, ITEMS, useItem, SKILLS, buySkill, need, save, exportCode, importCode } from './story.js';
 import { OUTFITS, HAIRS, SKINS } from './actor.js';
+import { CHARS, GEAR, REGIONS, MAP_SIZE, sealsCount } from './regions.js';
 import { S, A, applyVolumes, TRACK_NAMES } from './audio.js';
 import { angDiff, clamp } from './util.js';
 
@@ -31,13 +32,21 @@ export function setTrack(name) { $('trk').textContent = name ? '♪  ' + name : 
 const QNAMES = { basse: 'Basse', moyenne: 'Moyenne', haute: 'Haute' };
 export function panelHTML(kind, ctx) {
   if (kind === 'worlds') {
-    const W7 = [['桜', 'Sakura Valley', 'Vallée, village, dojo Sakura no Kage, sanctuaire, rizières, cascade. Jouable.', true], ['影', 'Shadow District', 'Ville nocturne et dojo Neon Shrine. Région pas encore construite.'], ['山', 'Mountain of Silence', 'Sommets enneigés, ponts suspendus, Mountain Dojo. Pas encore construite.'], ['紅', 'Red Dojo Province', 'Forteresses et forêts rouges. Pas encore construite.'], ['水', 'Water Temple', 'Région lacustre, temples sur l\'eau. Pas encore construite.'], ['翠', 'Jade Sanctuary', 'Bambouseraies, ruines et sanctuaires. Pas encore construite.'], ['無', 'Void Dojo', 'Le dernier dojo, hors des cartes. Pas encore construit.']];
-    return `<h2>七つの道場</h2><div class="h2sub">Sélection du monde · une région jouable dans cette version</div>` + W7.map((w, i) => `<div class="world ${w[3] ? 'ok' : 'off'}"><div class="n">${w[0]}</div><div class="t">${i + 1} · ${w[1]}</div><div class="d">${w[2]}</div></div>`).join('') + `<button class="back" data-b="${ctx === 'pause' ? 'pause' : 'title'}">Retour</button>`;
+    return `<h2>十の道場</h2><div class="h2sub">Dix vallées, dix dojos · toutes jouables</div>` + REGIONS.map((r, i) => `<div class="world ok"><div class="n">${r.kanji}</div><div class="t">${i + 1} · ${r.name}</div><div class="d">${r.dojo} · ${r.master}${ST.seals[r.id] ? ' · sceau obtenu' : ''}</div></div>`).join('') + `<button class="back" data-b="${ctx === 'pause' ? 'pause' : 'title'}">Retour</button>`;
   }
   if (kind === 'perso') {
     const lk = G.pl.look, opt = (grp, val, label, on, lock) => `<button class="opt ${on ? 'on' : ''} ${lock ? 'lock' : ''}" data-g="${grp}" data-v="${val}">${label}</button>`;
     const outs = Object.entries(OUTFITS).map(([k, o]) => opt('outfit', k, o.name.split(' (')[0], lk.outfit === k, o.locked && !ST.unlocks[o.locked])).join('');
-    return `<h2>Sora</h2><div class="h2sub">Personnage · tenues, coiffures et accessoires</div>
+    const cards = Object.entries(CHARS).map(([k, c]) => { const on = G.pl.char === k, locked = !ST.chars[k];
+      return `<button class="char ${on ? 'on' : ''} ${locked ? 'lock' : ''}" data-char="${k}" ${locked ? 'disabled' : ''}><b>${c.name}</b><span>${c.title}</span><small>${locked ? 'Verrouillé · ' + (c.unlock === 'seals:3' ? '3 sceaux' : c.unlock === 'seals:6' ? '6 sceaux' : 'histoire') : c.blurb}</small></button>`; }).join('');
+    const gear = ['lame', 'armure', 'bottes'].map((k) => { const t = G.pl.gear[k] || 0, ti = GEAR[k].tiers[t];
+      return `<div class="item"><div><div class="nm">${GEAR[k].label} · ${ti.name}</div><div class="ds">${ti.text}</div></div><span class="tag">${t + 1} / ${GEAR[k].tiers.length}</span></div>`; }).join('');
+    return `<h2>${CHARS[G.pl.char]?.name || 'Sora'}</h2><div class="h2sub">Combattants · équipement · apparence</div>
+      <h3 style="margin:6px 0 10px;font-size:12px;letter-spacing:.3em;color:var(--gold)">QUI ES-TU ?</h3>
+      <div class="chars">${cards}</div>
+      <h3 style="margin:24px 0 6px;font-size:12px;letter-spacing:.3em;color:var(--gold)">ÉQUIPEMENT</h3>${gear}
+      <div class="h2sub" style="margin-top:8px">Les paliers suivants s'achètent chez les forgerons et herboristes des neuf vallées.</div>
+      <h3 style="margin:24px 0 6px;font-size:12px;letter-spacing:.3em;color:var(--gold)">APPARENCE</h3>
       <div class="row"><span class="lab">Tenue</span><div class="opts">${outs}</div></div>
       <div class="row"><span class="lab">Coiffure</span><div class="opts">${Object.entries(HAIRS).map(([k, n]) => opt('hair', k, n, lk.hair === k)).join('')}</div></div>
       <div class="row"><span class="lab">Teint</span><div class="opts">${SKINS.map((c, i) => opt('skin', i, ['Clair', 'Mat', 'Foncé'][i], lk.skin === i)).join('')}</div></div>
@@ -45,7 +54,7 @@ export function panelHTML(kind, ctx) {
       <div class="row"><span class="lab">Bandeau</span><div class="opts">${opt('band', 1, 'Oui', lk.band)}${opt('band', 0, 'Non', !lk.band)}</div></div>
       <div class="row"><span class="lab">Chapeau de paille</span><div class="opts">${opt('kasa', 1, 'Oui', lk.kasa)}${opt('kasa', 0, 'Non', !lk.kasa)}</div></div>
       <div class="row"><span class="lab">Masque</span><div class="opts">${opt('mask', 1, 'Oui', lk.mask)}${opt('mask', 0, 'Non', !lk.mask)}</div></div>
-      <div class="h2sub" style="margin-top:16px">Les tenues grisées se débloquent dans l'histoire.</div>
+      <div class="h2sub" style="margin-top:16px">Les tenues et combattants grisés se débloquent dans l'histoire. L'apparence s'applique au combattant choisi.</div>
       <button class="back" data-b="${ctx === 'pause' ? 'pause' : 'title'}">Retour</button>`;
   }
   if (kind === 'settings') {
@@ -65,8 +74,9 @@ export function panelHTML(kind, ctx) {
       <div class="row"><span class="lab">Langue</span><div class="opts"><button class="opt on">Français</button></div></div>
       <div class="row"><span class="lab">Interface en jeu</span><div class="opts">${o('hud', 1, 'Visible', st.hud)}${o('hud', 0, 'Masquée', !st.hud)}</div></div>
       <h3 style="margin:26px 0 12px;font-size:12px;letter-spacing:.3em;color:var(--gold)">COMMANDES</h3>
-      <div class="keys"><b>ZQSD · flèches</b><span>se déplacer</span><b>Souris</b><span>caméra (clic pour la capturer, Échap pour la libérer)</span><b>Maj</b><span>courir</span><b>Alt · C</b><span>marcher</span><b>Espace</b><span>sauter, esquiver en combat</span><b>Clic gauche</b><span>attaque rapide (enchaînement)</span><b>Clic droit</b><span>attaque lourde</span><b>F</b><span>garde ; juste avant l'impact : parade</span><b>Q</b><span>technique (50 d'énergie)</span><b>R</b><span>ultime (100 d'énergie)</span><b>Tab · clic molette</b><span>verrouiller une cible</span><b>E</b><span>interagir, parler</span><b>1 · 2</b><span>onigiri · thé</span><b>M · J · I · K</b><span>carte · journal · inventaire · compétences</span><b>Molette</b><span>distance de la caméra</span><b>Échap</b><span>pause</span></div>
+      <div class="keys"><b>ZQSD · flèches</b><span>se déplacer</span><b>Souris</b><span>caméra (clic pour la capturer, Échap pour la libérer)</span><b>Maj</b><span>courir</span><b>Alt · C</b><span>marcher</span><b>Espace</b><span>sauter, esquiver en combat</span><b>Clic gauche</b><span>attaque rapide (enchaînement)</span><b>Clic droit</b><span>attaque lourde</span><b>F</b><span>garde ; juste avant l'impact : parade</span><b>Q</b><span>technique (50 d'énergie)</span><b>R</b><span>ultime (100 d'énergie)</span><b>Tab · clic molette</b><span>verrouiller une cible</span><b>E</b><span>interagir, parler</span><b>Espace · Ctrl</b><span>nager en surface · plonger (surveille ton souffle)</span><b>1 · 2</b><span>onigiri · thé</span><b>M · J · I · K</b><span>carte · journal · inventaire · compétences</span><b>Molette</b><span>distance de la caméra</span><b>Échap</b><span>pause</span></div>
       <div class="h2sub" style="margin-top:14px">Les touches suivent la position physique : ZQSD sur un clavier AZERTY, WASD sur un clavier QWERTY.</div>
+      <div class="h2sub" style="margin-top:8px">Certains mots anciens, tapés en jeu, réveillent des bénédictions. Les murs des dix dojos en connaissent plus d'un.</div>
       ${ctx === 'pause' ? `<h3 style="margin:26px 0 12px;font-size:12px;letter-spacing:.3em;color:var(--gold)">CODE DE SAUVEGARDE</h3><div class="h2sub">Copie ce code pour garder ta partie si le navigateur efface ses données.</div><textarea id="savecode" readonly></textarea><button class="opt" data-g="code" data-v="gen" style="margin-top:8px">Générer le code</button>` : `<h3 style="margin:26px 0 12px;font-size:12px;letter-spacing:.3em;color:var(--gold)">IMPORTER UNE PARTIE</h3><textarea id="importcode" placeholder="Colle ici un code de sauvegarde"></textarea><button class="opt" data-g="code" data-v="imp" style="margin-top:8px">Importer</button>`}
       <div class="h2sub" style="margin-top:14px">La qualité Basse / Moyenne / Haute change aussi la densité d'herbe et d'arbres : elle s'applique entièrement au prochain lancement.</div>
       <button class="back" data-b="${ctx === 'pause' ? 'pause' : 'title'}">Retour</button>`;
@@ -96,17 +106,18 @@ export function pauseTab(tab) {
     if (!ids.length) h += '<p class="qd" style="color:var(--mute)">Aucune quête pour le moment.</p>';
     for (const id of ['main1', ...ids.filter(i => i !== 'main1')]) { const q = ST.quests[id]; if (!q) continue; const Q = QUESTS[id], s = curStep(id);
       h += `<div class="q ${q.done ? 'done' : ''}"><div class="qk">${Q.kind}${ST.track === id ? ' · suivie' : ''}</div><div class="qt">${Q.title}</div><div class="qd">${q.done ? 'Terminée.' : s.text + (s.progress ? ' — ' + s.progress() : '')}</div>${!q.done && ST.track !== id ? `<button data-track="${id}">Suivre cette quête</button>` : ''}</div>`; }
+    h += `<h3 style="margin-top:26px">Les dix sceaux · ${sealsCount(ST.seals)} / 10</h3><div class="seals">${REGIONS.map(r => `<span class="${ST.seals[r.id] ? 'on' : ''}"><b>${r.kanji}</b>${r.name}</span>`).join('')}</div>`;
     const sc = Object.keys(ST.scrolls).length; h += `<h3 style="margin-top:26px">Rouleaux · ${sc} / 5</h3>`;
     for (const it of W.interact.filter(i => i.kind === 'rouleau' && ST.scrolls[i.id])) h += `<div class="q"><div class="qt">${it.lore.title}</div><div class="qd">${it.lore.text}</div></div>`;
     c.innerHTML = h;
   } else if (tab === 'map') {
-    c.innerHTML = '<h3>Sakura Valley</h3><div id="bigmap"><canvas id="bigc" width="1024" height="1024"></canvas></div><p class="qd" style="color:var(--mute);margin-top:10px">Les zones sombres n\'ont pas encore été explorées. Or : objectif suivi.</p>';
+    c.innerHTML = '<h3>Carte des dix vallées</h3><div id="bigmap"><canvas id="bigc" width="1024" height="1024"></canvas></div><p class="qd" style="color:var(--mute);margin-top:10px">Les zones sombres n\'ont pas encore été explorées. Or : objectif suivi.</p>';
     drawBigMap($('bigc'));
   } else if (tab === 'inv') {
     const pl = G.pl; let h = `<h3>Inventaire · ${pl.ryo} ryo</h3>`;
     const ks = Object.keys(pl.inv).filter(k => pl.inv[k] > 0); if (!ks.length) h += '<p class="qd" style="color:var(--mute)">Rien pour le moment.</p>';
     for (const k of ks) { const it = ITEMS[k]; h += `<div class="item"><div><div class="nm">${it.name} × ${pl.inv[k]}</div><div class="ds">${it.text}</div></div>${it.quest ? '' : `<button data-use="${k}">Utiliser</button>`}</div>`; }
-    h += '<h3 style="margin-top:26px">Équipement</h3>' + `<div class="item"><div><div class="nm">Katana du nord</div><div class="ds">Forgé par ton père. Raizo dit que c\'est du bon acier.</div></div></div><div class="item"><div><div class="nm">Tenue : ${OUTFITS[pl.look.outfit].name.split(' (')[0]}</div><div class="ds">Change de tenue dans l\'onglet Personnage.</div></div></div>`;
+    h += '<h3 style="margin-top:26px">Équipement</h3>' + ['lame', 'armure', 'bottes'].map((k) => { const t = pl.gear[k] || 0, ti = GEAR[k].tiers[t]; return `<div class="item"><div><div class="nm">${GEAR[k].label} · ${ti.name}</div><div class="ds">${ti.text}</div></div><span class="tag">${t + 1} / ${GEAR[k].tiers.length}</span></div>`; }).join('') + `<div class="item"><div><div class="nm">Tenue : ${OUTFITS[pl.look.outfit].name.split(' (')[0]}</div><div class="ds">Combattant : ${CHARS[pl.char]?.name || 'Sora'} · change de tenue dans l'onglet Personnage.</div></div></div>`;
     c.innerHTML = h;
   } else if (tab === 'skills') {
     const pl = G.pl; let h = `<h3>Compétences · ${pl.sp} point${pl.sp > 1 ? 's' : ''} · niveau ${pl.level}</h3>`;
@@ -119,11 +130,11 @@ export function pauseTab(tab) {
 }
 
 /* ---------- carte ---------- */
-function worldToMap(x, z, S) { return [(x + 280) / 560 * S, (z + 280) / 560 * S]; }
+function worldToMap(x, z, S) { return [(x + MAP_SIZE / 2) / MAP_SIZE * S, (z + MAP_SIZE / 2) / MAP_SIZE * S]; }
 export function drawBigMap(cv) {
   const g = cv.getContext('2d'), S = cv.width; g.drawImage(W.mapCanvas, 0, 0, S, S);
-  const cs = S / 28; g.fillStyle = 'rgba(8,8,10,0.86)';
-  for (let z = 0; z < 28; z++) for (let x = 0; x < 28; x++) if (!ST.fog[z * 28 + x]) g.fillRect(x * cs - 0.5, z * cs - 0.5, cs + 1, cs + 1);
+  const cs = S / 64; g.fillStyle = 'rgba(8,8,10,0.86)';
+  for (let z = 0; z < 64; z++) for (let x = 0; x < 64; x++) if (!ST.fog[z * 64 + x]) g.fillRect(x * cs - 0.5, z * cs - 0.5, cs + 1, cs + 1);
   g.font = '600 18px "Zen Kaku Gothic New"'; g.textAlign = 'center';
   for (const p of W.pois) { if (!ST.disc[p.id]) continue; const [x, y] = worldToMap(p.x, p.z, S); g.fillStyle = '#141210'; g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill(); g.fillStyle = '#f2ede4'; g.beginPath(); g.arc(x, y, 4, 0, 7); g.fill();
     g.fillStyle = 'rgba(10,10,12,.75)'; const w = g.measureText(p.name).width; g.fillRect(x - w / 2 - 6, y - 34, w + 12, 22); g.fillStyle = '#f2ede4'; g.fillText(p.name, x, y - 17); }
@@ -132,10 +143,10 @@ export function drawBigMap(cv) {
   g.beginPath(); g.moveTo(0, -16); g.lineTo(10, 12); g.lineTo(0, 6); g.lineTo(-10, 12); g.closePath(); g.fill(); g.stroke(); g.restore();
 }
 function drawMini() {
-  const cv = $('mini'), g = cv.getContext('2d'), S = cv.width, pl = G.pl, R0 = 70, k = S / (R0 * 2), mk = 512 / 560;
+  const cv = $('mini'), g = cv.getContext('2d'), S = cv.width, pl = G.pl, R0 = 70, k = S / (R0 * 2), mk = W.mapCanvas.width / MAP_SIZE;
   g.save(); g.clearRect(0, 0, S, S); g.beginPath(); g.arc(S / 2, S / 2, S / 2, 0, 7); g.clip(); g.fillStyle = '#1a1a1c'; g.fillRect(0, 0, S, S);
   g.translate(S / 2, S / 2); g.rotate(G.cam.yaw + Math.PI);
-  const sx = (pl.pos.x + 280) * mk, sz = (pl.pos.z + 280) * mk, r = R0 * mk * 1.45;
+  const sx = (pl.pos.x + MAP_SIZE / 2) * mk, sz = (pl.pos.z + MAP_SIZE / 2) * mk, r = R0 * mk * 1.45;
   g.drawImage(W.mapCanvas, sx - r, sz - r, r * 2, r * 2, -R0 * 1.45 * k, -R0 * 1.45 * k, R0 * 2.9 * k, R0 * 2.9 * k);
   const at = activeTarget(); if (at && at.t) { let dx = (at.t.x - pl.pos.x) * k, dz = (at.t.z - pl.pos.z) * k; const d = Math.hypot(dx, dz), m = S / 2 - 10; if (d > m) { dx *= m / d; dz *= m / d; } g.fillStyle = '#c9a45c'; g.beginPath(); g.arc(dx, dz, 6, 0, 7); g.fill(); }
   for (const e of G.enemies) if (!e.dead && e.aggro) { const dx = (e.pos.x - pl.pos.x) * k, dz = (e.pos.z - pl.pos.z) * k; if (Math.hypot(dx, dz) < S / 2) { g.fillStyle = '#d6533f'; g.beginPath(); g.arc(dx, dz, 4, 0, 7); g.fill(); } }
@@ -164,7 +175,7 @@ export function hudUpdate(dt, inter) {
   st.innerHTML = h;
   /* objectif */
   if (at) { $('objt').textContent = G.training ? 'Entraînement' : QUESTS[at.id].title; $('objs').textContent = at.text; $('objp').textContent = (at.progress || '') + (at.t ? `   ${Math.round(Math.hypot(at.t.x - pl.pos.x, at.t.z - pl.pos.z))} m` : ''); }
-  else { $('objt').textContent = G.training ? 'Mode entraînement' : (ST.flags.chapter1 ? 'Chapitre 1 terminé' : ''); $('objs').textContent = G.training ? 'Makiwara à gauche · T : appeler un partenaire · Échap : menu' : (ST.flags.chapter1 ? 'Explore librement la vallée et termine les quêtes secondaires.' : ''); $('objp').textContent = ''; }
+  else { $('objt').textContent = G.training ? 'Mode entraînement' : 'Le KAGE TRIAL'; $('objs').textContent = G.training ? 'Makiwara à gauche · T : appeler un partenaire · Échap : menu' : `Les dix dojos t'attendent. Sceaux : ${sealsCount(ST.seals)} / 10 · cherche les braseros, offrandes et autels des vallées.`; $('objp').textContent = ''; }
   /* barres, discrètes hors combat */
   const calm = G.combatT < -2 && pl.hp >= pl.hpMax * 0.99 && !pl.lock;
   $('bars').style.opacity = calm ? '0.35' : '1'; $('tech').style.opacity = calm ? '0' : '1';
@@ -174,6 +185,12 @@ export function hudUpdate(dt, inter) {
   $('tq').style.opacity = pl.special ? 1 : 0.35; $('tr').style.opacity = pl.ult ? 1 : 0.35;
   const hr = Math.floor(W.time), mn = Math.floor((W.time - hr) * 60);
   $('clock').textContent = `${String(hr).padStart(2, '0')}:${String(mn).padStart(2, '0')}  ·  ${W.weather.kind}`;
+  const reg = G.region || REGIONS[0];
+  $('regk').textContent = reg.kanji; $('regn').textContent = reg.name; $('sealn').textContent = sealsCount(ST.seals) + ' / 10 sceaux';
+  $('ox').classList.toggle('hide', !pl.inWater);
+  $('oxb').style.width = Math.max(0, pl.oxygen) + '%';
+  $('oxb').classList.toggle('low', pl.oxygen < 30);
+  $('uw').classList.toggle('on', !!W.underwater);
   miniT -= dt; if (miniT < 0) { miniT = 0.08; drawMini(); }
   /* invite d'interaction */
   if (inter && G.mode === 'play') { $('prompt').classList.remove('hide'); $('promptt').textContent = inter.label; } else $('prompt').classList.add('hide');
