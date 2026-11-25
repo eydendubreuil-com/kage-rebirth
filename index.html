@@ -132,6 +132,40 @@ textarea{width:100%;height:70px;background:#0e0e10;color:var(--paper2);border:1p
 #card .b{font-family:'Shippori Mincho B1',serif;font-size:clamp(28px,4vw,54px);letter-spacing:.24em}
 #skip{position:absolute;right:28px;top:calc(11vh + 16px);font-size:11px;letter-spacing:.2em;color:var(--mute)}
 
+/* région, souffle, immersion, fin */
+#region{position:absolute;left:28px;top:20px;display:flex;align-items:center;gap:12px;text-shadow:0 1px 6px #000}
+#region b{font-family:'Shippori Mincho B1',serif;font-size:30px;font-weight:500;color:var(--red);line-height:1}
+#region span{font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--paper2)}
+#region em{font-style:normal;font-size:10px;letter-spacing:.16em;color:var(--gold);border-left:1px solid var(--line);padding-left:12px}
+#ox{position:absolute;left:50%;bottom:166px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;font-size:10px;letter-spacing:.28em;color:#cfe4ea;text-shadow:0 1px 6px #000}
+#ox .obar{width:180px;height:5px;border-radius:3px;background:rgba(207,228,234,.18);overflow:hidden}
+#ox .obar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#5f9fb5,#cfe4ea);transition:width .15s}
+#ox .obar i.low{background:linear-gradient(90deg,#a33327,#f08a6a)}
+#uw{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .7s;z-index:9;background:radial-gradient(ellipse at center,rgba(10,40,50,0) 30%,rgba(6,28,38,.55) 100%);box-shadow:inset 0 0 180px rgba(20,80,100,.55)}
+#uw.on{opacity:1}
+.chars{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px}
+.char{text-align:left;padding:12px 14px;border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;gap:2px;transition:all .2s}
+.char:hover{border-color:var(--paper2)}.char.on{border-color:var(--gold);background:rgba(201,164,92,.1)}
+.char b{font-size:16px;letter-spacing:.08em}.char span{font-size:11px;color:var(--gold);letter-spacing:.1em}
+.char small{font-size:11px;color:var(--mute);line-height:1.5;margin-top:4px}
+.char.lock{opacity:.4;cursor:not-allowed}
+.tag{font-size:11px;letter-spacing:.1em;color:var(--gold);white-space:nowrap}
+.seals{display:flex;flex-wrap:wrap;gap:6px}
+.seals span{display:flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--line);border-radius:16px;font-size:11px;color:var(--mute)}
+.seals span b{font-family:'Shippori Mincho B1',serif;font-size:16px;color:var(--mute);font-weight:500}
+.seals span.on{border-color:var(--gold);color:var(--paper)}.seals span.on b{color:var(--gold)}
+#ending{z-index:46;background:radial-gradient(ellipse at center,rgba(10,9,12,.94),rgba(3,3,4,.99));display:flex;align-items:center;justify-content:center;pointer-events:auto;opacity:0;transition:opacity 1.4s}
+#ending:not(.hide){opacity:1}
+#ending .endbox{max-width:760px;padding:0 28px;text-align:center}
+#ending .kanji{font-size:96px;line-height:1;color:var(--paper);opacity:.9}
+#ending .sub{margin-top:18px;font-size:11px;letter-spacing:.5em;color:var(--gold);text-transform:uppercase}
+#ending h2{font-family:'Shippori Mincho B1',serif;font-size:clamp(26px,4vw,46px);letter-spacing:.18em;margin:18px 0 16px}
+#ending p{font-size:15px;line-height:1.85;color:var(--paper2);max-width:600px;margin:0 auto}
+#ending .stats{display:flex;justify-content:center;gap:34px;margin:34px 0 8px;flex-wrap:wrap}
+#ending .stats span{font-size:10px;letter-spacing:.24em;color:var(--mute);text-transform:uppercase;display:flex;flex-direction:column;gap:6px}
+#ending .stats b{font-family:'Shippori Mincho B1',serif;font-size:26px;color:var(--paper);letter-spacing:.06em}
+#ending .back{pointer-events:auto;margin-top:26px}
+
 /* pause */
 #pause{z-index:40;background:rgba(5,5,6,.82);backdrop-filter:blur(6px);pointer-events:auto;display:grid;grid-template-columns:260px 1fr;padding:7vh 6vw;gap:4vw}
 #pause .side h2{font-family:'Shippori Mincho B1',serif;font-size:40px;letter-spacing:.2em;margin-bottom:28px}
@@ -183,7 +217,7 @@ window.addEventListener('unhandledrejection',function(e){show((e.reason&&e.reaso
 
 <div id="title" class="layer hide">
   <div class="veil"></div>
-  <div class="brand"><div class="kanji mincho">影</div><div class="name mincho">KAGE<em>:</em> REBIRTH</div><div class="sub">Sakura Valley · Chapitre 1</div></div>
+  <div class="brand"><div class="kanji mincho">影</div><div class="name mincho">KAGE<em>:</em> REBIRTH</div><div class="sub">Dix dojos · Une vallée · Dix sceaux</div></div>
   <div class="menu" id="menu">
     <button data-a="new">Nouvelle partie</button>
     <button data-a="continue">Continuer</button>
@@ -201,12 +235,14 @@ window.addEventListener('unhandledrejection',function(e){show((e.reason&&e.reaso
 
 <div id="hud" class="layer hide">
   <div id="compass"><div class="strip" id="cstrip"></div></div>
+  <div id="region"><b id="regk" class="mincho">桜</b><span id="regn">Sakura Valley</span><em id="sealn">0 / 10 sceaux</em></div>
   <div id="obj"><div class="qt" id="objt"></div><div class="qs" id="objs"></div><div class="qp" id="objp"></div></div>
   <div id="lockbar" class="hide"><div class="nm" id="lockn"></div><div class="bar"><i id="lockh"></i></div></div>
   <div id="combo" class="hide"><b id="combon">0</b><span>COUPS</span></div>
   <div id="ebars"></div><div id="bubbles"></div>
   <div id="reticle" class="hide"></div>
   <div id="bars"><div class="lv" id="lvl">NIVEAU 1</div><div class="bar hp"><i id="hpb"></i></div><div class="bar en"><i id="enb"></i></div><div class="bar xp"><i id="xpb"></i></div></div>
+  <div id="ox" class="hide"><span>SOUFFLE</span><div class="obar"><i id="oxb"></i></div></div>
   <div id="tech"><div class="tk" id="tq"><b>花</b>Q · TECHNIQUE</div><div class="tk" id="tr"><b>影</b>R · ULTIME</div></div>
   <div id="clock"></div>
   <canvas id="mini" width="340" height="340"></canvas>
@@ -221,6 +257,8 @@ window.addEventListener('unhandledrejection',function(e){show((e.reason&&e.reaso
   <button data-p="resume">Reprendre</button><button data-p="journal">Journal</button><button data-p="map">Carte</button><button data-p="inv">Inventaire</button><button data-p="skills">Compétences</button><button data-p="look">Personnage</button><button data-p="settings">Paramètres</button><button data-p="save">Sauvegarder</button><button data-p="quit">Menu principal</button>
 </div></div><div class="content" id="pcontent"></div></div>
 <div id="lore" class="layer hide"><div class="sheet"><h4 id="loreh"></h4><p id="lorep"></p><div class="close">E · ÉCHAP · CLIC POUR FERMER</div></div></div>
+<div id="uw"></div>
+<div id="ending" class="layer hide"><div class="endbox"><div class="kanji mincho">終</div><div class="sub">KAGE TRIAL · TERMINÉ</div><h2>Les dix dojos sont réunis</h2><p id="ends"></p><div class="stats" id="endst"></div><button id="endbtn" class="back">Revenir au menu</button></div></div>
 <div id="fade" class="layer"><div class="t" id="fadet"></div><div class="s" id="fades"></div></div>
 
 <script type="module" src="main.js"></script>
