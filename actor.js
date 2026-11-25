@@ -132,8 +132,14 @@ export class Actor {
     const obiM = mat('obi' + OF.obi, () => new THREE.MeshStandardMaterial({ color: OF.obi, roughness: 0.8 }));
     const accM = mat('acc' + OF.accent, () => new THREE.MeshStandardMaterial({ color: OF.accent, roughness: 0.85, side: THREE.DoubleSide }));
     const hairM = mat('hair' + o.hairColor, () => new THREE.MeshStandardMaterial({ color: o.hairColor, roughness: 0.5, metalness: 0.05 }));
+    const hairHiM = mat('hairHi' + o.hairColor, () => new THREE.MeshStandardMaterial({ color: new THREE.Color(o.hairColor).offsetHSL(0, 0, 0.09), roughness: 0.42 }));
     const dark = mat('eye', () => new THREE.MeshStandardMaterial({ color: '#16110e', roughness: 0.3 }));
     const white = mat('white', () => new THREE.MeshStandardMaterial({ color: '#f2eee6', roughness: 0.4 }));
+    const irisM = mat('iris', () => new THREE.MeshStandardMaterial({ color: '#3a271a', roughness: 0.32 }));
+    const pupilM = mat('pupil', () => new THREE.MeshStandardMaterial({ color: '#080706', roughness: 0.25 }));
+    const shineM = mat('eyeShine', () => new THREE.MeshBasicMaterial({ color: '#fffdf7' }));
+    const lipM = mat('lip', () => new THREE.MeshStandardMaterial({ color: '#7a3e34', roughness: 0.55 }));
+    const mouthIn = mat('mouthIn', () => new THREE.MeshStandardMaterial({ color: '#2a1414', roughness: 0.75 }));
     const tabi = mat('tabi', () => new THREE.MeshStandardMaterial({ color: '#e9e4da', roughness: 0.9 }));
     const steel = mat('steel', () => new THREE.MeshStandardMaterial({ color: '#d9dde2', roughness: 0.18, metalness: 1 }));
     const wrap = mat('wrap', () => new THREE.MeshStandardMaterial({ color: '#1a1714', roughness: 0.8 }));
@@ -159,43 +165,95 @@ export class Actor {
     add(j.chest, new THREE.BoxGeometry(0.05, 0.27, 0.02), inM, 0.03, 0.13, 0.152, 0, 0, 0.42);
     add(j.chest, new THREE.BoxGeometry(0.05, 0.27, 0.02), inM, -0.03, 0.13, 0.155, 0, 0, -0.42);
     add(j.chest, new THREE.BoxGeometry(0.035, 0.26, 0.022), topM, -0.065, 0.12, 0.158, 0, 0, -0.42);
+    add(j.chest, new THREE.CylinderGeometry(0.105, 0.14, 0.055, 14, 1, true), inM, 0, 0.255, 0);
+    add(j.chest, new THREE.BoxGeometry(0.04, 0.235, 0.018), inM, 0.055, 0.12, 0.157, 0, 0, 0.35);
     add(j.hips, new THREE.CylinderGeometry(0.185, 0.18, 0.13, 18), obiM, 0, 0.06, 0).scale.z = 0.8;
     add(j.hips, new THREE.BoxGeometry(0.16, 0.09, 0.07), obiM, 0, 0.07, -0.16);
+    add(j.hips, new THREE.BoxGeometry(0.06, 0.18, 0.025), obiM, 0.02, -0.1, 0.17, 0.12, 0, 0.18);
+    add(j.hips, new THREE.BoxGeometry(0.05, 0.14, 0.02), obiM, -0.04, -0.08, 0.168, 0.1, 0, -0.2);
     /* hakama : jambes larges + pans avant / arrière */
     for (const t of [j.thL, j.thR]) { add(t, new THREE.CylinderGeometry(0.12, 0.2, 0.86, 14, 1, true), hakM, 0, -0.4, 0); add(t, new THREE.CylinderGeometry(0.2, 0.2, 0.01, 14), hakM, 0, -0.83, 0); }
     j.hakF = G(j.hips, 0, 0.02, 0.12); add(j.hakF, new THREE.BoxGeometry(0.36, 0.72, 0.02), hakM, 0, -0.36, 0);
     j.hakB = G(j.hips, 0, 0.04, -0.13); add(j.hakB, new THREE.BoxGeometry(0.38, 0.74, 0.02), hakM, 0, -0.37, 0);
+    const pleatM = mat('pleat' + o.outfit, () => new THREE.MeshStandardMaterial({ color: new THREE.Color(OF.hakama).offsetHSL(0, 0, -0.045), roughness: 0.95 }));
+    for (const px of [-0.13, -0.065, 0, 0.065, 0.13]) {
+      add(j.hakF, new THREE.BoxGeometry(0.011, 0.68, 0.012), pleatM, px, -0.36, 0.012);
+      add(j.hakB, new THREE.BoxGeometry(0.011, 0.70, 0.012), pleatM, px, -0.37, -0.012);
+    }
     add(j.hips, lathe([[0.17, 0.04], [0.2, -0.04], [0.24, -0.14]], 14), hakM).scale.z = 0.82;
     /* bras : manches larges, avant-bras, mains */
     for (const [sh, el, hn, side] of [[j.shL, j.elL, j.hnL, 1], [j.shR, j.elR, j.hnR, -1]]) {
       add(sh, cap(0.055, 0.2), topM, 0, -0.14, 0);
       add(sh, new THREE.CylinderGeometry(0.075, 0.13, 0.3, 12, 1, true), topM, 0, -0.17, 0);
       const flap = G(sh, 0, -0.06, 0); add(flap, new THREE.BoxGeometry(0.02, 0.24, 0.2), topM, side * 0.03, -0.16, 0); j[side > 0 ? 'flapL' : 'flapR'] = flap;
+      add(sh, new THREE.SphereGeometry(0.07, 10, 8), topM, 0, -0.01, 0).scale.set(1, 0.82, 1);
       add(el, cap(0.042, 0.17), skin, 0, -0.12, 0);
       add(el, new THREE.CylinderGeometry(0.048, 0.052, 0.12, 10), wrap, 0, -0.2, 0);
-      add(hn, new THREE.BoxGeometry(0.06, 0.09, 0.085), skin, 0, -0.04, 0.01);
+      add(el, new THREE.CylinderGeometry(0.052, 0.058, 0.055, 10, 1, true), topM, 0, -0.255, 0);
+      const hand = G(hn, 0, 0, 0);
+      add(hand, new THREE.BoxGeometry(0.058, 0.072, 0.036), skin, 0, -0.035, 0.012);
+      for (let fi = 0; fi < 4; fi++) add(hand, cap(0.0072, 0.036), skin, -0.021 + fi * 0.014, -0.083, 0.016, 0.08);
+      add(hand, cap(0.009, 0.032), skin, 0.031, -0.045, 0.012, 0, 0, -0.72);
+      add(hand, new THREE.CylinderGeometry(0.048, 0.045, 0.035, 10, 1, true), wrap, 0, 0.002, 0);
     }
-    for (const [ft] of [[j.ftL], [j.ftR]]) { add(ft, new THREE.BoxGeometry(0.09, 0.07, 0.24), tabi, 0, -0.03, 0.05); add(ft, new THREE.BoxGeometry(0.1, 0.02, 0.26), lac, 0, -0.07, 0.05); }
+    for (const [ft] of [[j.ftL], [j.ftR]]) {
+      add(ft, new THREE.BoxGeometry(0.09, 0.07, 0.24), tabi, 0, -0.03, 0.05);
+      add(ft, new THREE.BoxGeometry(0.1, 0.02, 0.26), lac, 0, -0.07, 0.05);
+      add(ft, new THREE.BoxGeometry(0.095, 0.012, 0.026), wrap, 0, 0.01, 0.09, 0.1);
+      add(ft, new THREE.BoxGeometry(0.085, 0.012, 0.02), wrap, 0, -0.005, 0.02);
+      add(ft, new THREE.CylinderGeometry(0.042, 0.045, 0.045, 8, 1, true), hakM, 0, 0.03, -0.01);
+    }
     /* tête */
     const H = j.head;
     const headM = add(H, new THREE.SphereGeometry(0.1, 24, 18), skin, 0, 0.1, 0.005); headM.scale.set(0.95, 1.12, 1.02);
     add(H, new THREE.SphereGeometry(0.07, 16, 12), skin, 0, 0.055, 0.03).scale.set(1, 0.9, 1.05);
     add(H, new THREE.CylinderGeometry(0.04, 0.045, 0.08, 10), skin, 0, 0.0, 0);
     add(H, new THREE.ConeGeometry(0.014, 0.04, 6), skin, 0, 0.09, 0.106, 1.35);
-    for (const sx of [-1, 1]) add(H, new THREE.SphereGeometry(0.022, 8, 6), skin, sx * 0.095, 0.095, 0).scale.set(0.6, 1, 0.9);
+    for (const sx of [-1, 1]) {
+      add(H, new THREE.SphereGeometry(0.022, 10, 8), skin, sx * 0.095, 0.095, 0).scale.set(0.65, 1.05, 0.9);
+      add(H, new THREE.SphereGeometry(0.012, 8, 6), mat('earIn', () => new THREE.MeshStandardMaterial({ color: '#b57c63', roughness: 0.7 })), sx * 0.098, 0.095, 0.006).scale.set(0.45, 0.75, 0.45);
+    }
+    /* yeux : blanc, iris, pupille et reflet séparés pour un regard lisible */
     this.eyes = []; this.brows = [];
     for (const sx of [-1, 1]) {
-      const w = add(H, new THREE.SphereGeometry(0.019, 12, 8), white, sx * 0.037, 0.115, 0.088); w.scale.set(1.25, 0.75, 0.6);
-      const e = add(H, new THREE.SphereGeometry(0.012, 10, 8), dark, sx * 0.037, 0.115, 0.098); e.scale.set(1, 1.1, 0.5); this.eyes.push(w, e);
-      this.brows.push(add(H, new THREE.BoxGeometry(0.036, 0.007, 0.01), hairM, sx * 0.038, 0.142, 0.096));
+      const w = add(H, new THREE.SphereGeometry(0.019, 14, 10), white, sx * 0.037, 0.115, 0.088); w.scale.set(1.3, 0.78, 0.62);
+      const ir = add(H, new THREE.SphereGeometry(0.0105, 10, 8), irisM, sx * 0.037, 0.114, 0.0995); ir.scale.set(1, 1.05, 0.35);
+      const pu = add(H, new THREE.SphereGeometry(0.0055, 8, 6), pupilM, sx * 0.037, 0.114, 0.1035); pu.scale.set(1, 1.1, 0.35);
+      const sh = add(H, new THREE.SphereGeometry(0.0032, 6, 5), shineM, sx * 0.0405, 0.120, 0.1065); sh.scale.set(1, 1, 0.4);
+      for (const part of [w, ir, pu, sh]) { part.userData.baseScaleY = part.scale.y; this.eyes.push(part); }
+      this.brows.push(add(H, new THREE.BoxGeometry(0.038, 0.007, 0.01), hairM, sx * 0.038, 0.142, 0.096));
     }
-    this.mouth = add(H, new THREE.BoxGeometry(0.03, 0.006, 0.01), mat('lip', () => new THREE.MeshStandardMaterial({ color: '#7a3e34', roughness: 0.6 })), 0, 0.048, 0.1);
+    /* narines, lèvres et menton : le visage ne s'arrête plus au masque */
+    for (const sx of [-1, 1]) add(H, new THREE.SphereGeometry(0.0042, 6, 5), mouthIn, sx * 0.011, 0.0755, 0.107).scale.set(0.65, 0.5, 0.35);
+    add(H, new THREE.SphereGeometry(0.058, 12, 9), skin, 0, 0.028, 0.012).scale.set(0.82, 0.5, 0.8);
+    this.mouth = G(H, 0, 0.048, 0.101);
+    add(this.mouth, new THREE.BoxGeometry(0.032, 0.006, 0.008), lipM, 0, 0.002, 0);
+    add(this.mouth, new THREE.BoxGeometry(0.026, 0.0045, 0.006), lipM, 0, -0.006, 0.001);
+    add(this.mouth, new THREE.BoxGeometry(0.021, 0.005, 0.004), mouthIn, 0, -0.001, -0.002);
     /* cheveux */
     const hairCap = add(H, new THREE.SphereGeometry(0.108, 22, 14, 0, Math.PI * 2, 0, Math.PI * 0.55), hairM, 0, 0.115, -0.006); hairCap.scale.set(1, 1.12, 1.06); hairCap.rotation.x = -0.25;
     add(H, new THREE.SphereGeometry(0.1, 16, 10, 0, Math.PI * 2, Math.PI * 0.35, Math.PI * 0.4), hairM, 0, 0.1, -0.02).scale.set(1.03, 1.1, 1.06);
-    if (o.hair === 'chignon') { add(H, new THREE.CylinderGeometry(0.022, 0.03, 0.09, 10), hairM, 0, 0.215, -0.04, -0.6); add(H, new THREE.SphereGeometry(0.035, 10, 8), hairM, 0, 0.23, -0.07); }
-    if (o.hair === 'court') for (let k = 0; k < 7; k++) add(H, new THREE.ConeGeometry(0.03, 0.08, 5), hairM, (k - 3) * 0.025, 0.17, 0.08, 1.9, 0, (k - 3) * 0.12);
-    if (o.hair === 'queue') { add(H, new THREE.SphereGeometry(0.03, 10, 8), hairM, 0, 0.17, -0.1); if (o.chains) { const c = new Chain(this.scene, 7, 0.07, 0.035, hairM); c.attach = () => this.wpos(H, 0, 0.16, -0.12); c.side = 'x'; this.chains.push(c); } }
+    if (o.hair === 'chignon') {
+      add(H, new THREE.CylinderGeometry(0.022, 0.03, 0.09, 10), hairM, 0, 0.215, -0.04, -0.6);
+      add(H, new THREE.SphereGeometry(0.035, 12, 9), hairM, 0, 0.23, -0.07);
+      add(H, new THREE.CapsuleGeometry(0.014, 0.11, 3, 6), hairM, -0.084, 0.075, -0.005, 0, 0, 0.22);
+      add(H, new THREE.CapsuleGeometry(0.014, 0.11, 3, 6), hairM, 0.084, 0.075, -0.005, 0, 0, -0.22);
+      add(H, new THREE.CylinderGeometry(0.006, 0.006, 0.14, 6), goldM, 0, 0.235, -0.04, 0, 0, Math.PI / 2);
+    }
+    if (o.hair === 'court') {
+      for (let k = 0; k < 7; k++) add(H, new THREE.ConeGeometry(0.03, 0.08, 5), hairM, (k - 3) * 0.025, 0.17, 0.08, 1.9, 0, (k - 3) * 0.12);
+      add(H, new THREE.BoxGeometry(0.018, 0.075, 0.02), hairM, -0.089, 0.075, 0.03, 0, 0, 0.12);
+      add(H, new THREE.BoxGeometry(0.018, 0.075, 0.02), hairM, 0.089, 0.075, 0.03, 0, 0, -0.12);
+    }
+    if (o.hair === 'queue') {
+      add(H, new THREE.SphereGeometry(0.03, 10, 8), hairM, 0, 0.17, -0.1);
+      add(H, new THREE.CapsuleGeometry(0.03, 0.28, 4, 8), hairM, 0, 0.01, -0.17, 0.35, 0, 0.04);
+      add(H, new THREE.ConeGeometry(0.045, 0.14, 7), hairM, 0, -0.135, -0.23, -0.3);
+      add(H, new THREE.TorusGeometry(0.033, 0.008, 6, 12), accM, 0, 0.13, -0.11, 0, 0, Math.PI / 2);
+      if (o.chains) { const c = new Chain(this.scene, 7, 0.07, 0.035, hairM); c.attach = () => this.wpos(H, 0, 0.16, -0.12); c.side = 'x'; this.chains.push(c); }
+    }
+    /* mèches de lumière : cassent l'aspect bloc de la chevelure */
+    for (let hi = 0; hi < 3; hi++) add(H, new THREE.CapsuleGeometry(0.004, 0.075, 2, 4), hairHiM, -0.045 + hi * 0.045, 0.175, 0.045, 0.15, 0, (hi - 1) * 0.18);
     if (o.hair === 'capuche' || o.mask) {
       const hood = add(H, new THREE.SphereGeometry(0.118, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.62), accM.color.getHex() === 0 ? topM : topM, 0, 0.105, -0.01); hood.scale.set(1.02, 1.12, 1.1); hood.rotation.x = -0.15;
       if (o.hair === 'capuche') hairCap.visible = false;
@@ -261,13 +319,24 @@ export class Actor {
   animate(dt, st) {
     const cur = this.cur, base = this.base, tmp = this.tmp;
     this.phase += dt * (st.speed > 0.1 ? 3.2 + st.speed * 1.35 : 0);
+    const nowT = performance.now() * 0.001;
     const sp = clamp(st.speed / 5, 0, 1.6), ph = this.phase, br = Math.sin(performance.now() * 0.0012 + this.phase) ;
     /* base : repos ou garde */
     mix(base, P.idle, P.guard, st.stance === 'guard' ? 1 : 0);
-    base[NJ * 3] += br * 0.006; base[3] += br * 0.02;
+    base[NJ * 3] += br * 0.009; base[3] += br * 0.02;
+    /* poids du corps : personne ne reste parfaitement immobile */
+    base[J.indexOf('hips') * 3 + 1] += Math.sin(nowT * 0.62 + this.phase) * 0.014;
+    base[J.indexOf('chest') * 3] += Math.sin(nowT * 0.83 + this.phase) * 0.01;
     if (st.special && P[st.special]) mix(base, base, P[st.special], 1);
     if (st.special === 'sweep') { base[J.indexOf('shL') * 3 + 1] += Math.sin(ph * 0 + performance.now() * 0.004) * 0.5; base[J.indexOf('shR') * 3 + 1] += Math.sin(performance.now() * 0.004) * 0.5; }
-    if (st.special === 'talk') { base[J.indexOf('shR') * 3] += Math.sin(performance.now() * 0.003) * 0.25; base[J.indexOf('elR') * 3] += Math.sin(performance.now() * 0.005) * 0.2; }
+    if (st.special === 'talk' || this.talking > 0) {
+      const g = Math.sin(nowT * 3.4 + this.phase), g2 = Math.sin(nowT * 2.1 + this.phase);
+      base[J.indexOf('shR') * 3] += g * 0.16;
+      base[J.indexOf('elR') * 3] += 0.28 + g2 * 0.22;
+      base[J.indexOf('shL') * 3] += g2 * 0.05;
+      base[J.indexOf('head') * 3 + 1] += g2 * 0.055;
+      base[J.indexOf('chest') * 3 + 1] += g * 0.03;
+    }
     /* marche et course */
     if (sp > 0.02 && !st.air && !st.special) {
       const A = 0.42 + sp * 0.32, s1 = Math.sin(ph), c1 = Math.cos(ph);
@@ -319,7 +388,7 @@ export class Actor {
     for (const [f, sh, sgn] of [[this.j.flapL, 'shL', 1], [this.j.flapR, 'shR', -1]]) { if (!f) continue; const a = cur[J.indexOf(sh) * 3]; f.rotation.x = damp(f.rotation.x, -a * 0.7 + st.speed * 0.05, 8, dt); }
     /* visage : clignement, sourcils, bouche */
     this.blinkT -= dt; const bl = this.blinkT < 0.12 ? 0.1 : 1; if (this.blinkT < 0) this.blinkT = rr(2, 5);
-    for (let i = 0; i < this.eyes.length; i++) this.eyes[i].scale.y = (i % 2 ? 1.1 : 0.75) * bl;
+    for (const e of this.eyes) e.scale.y = (e.userData.baseScaleY || 1) * bl;
     const em = this.emotion, bAng = em === 'colere' ? 0.35 : (em === 'surprise' ? -0.15 : (em === 'joie' ? -0.08 : 0)), bY = em === 'surprise' ? 0.008 : (em === 'colere' ? -0.005 : 0);
     this.brows.forEach((b, i) => { b.rotation.z = (i === 0 ? -bAng : bAng); b.position.y = 0.142 + bY; });
     this.talking = Math.max(0, this.talking - dt);

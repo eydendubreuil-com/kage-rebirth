@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { G, setLook, hpMaxOf } from './game.js';
 import { W } from './world.js';
-import { ST, QUESTS, curStep, activeTarget, dialogNext, ITEMS, useItem, SKILLS, buySkill, need, save, exportCode, importCode } from './story.js';
+import { ST, QUESTS, curStep, activeTarget, dialogNext, dialogSay, closeDialog, ITEMS, useItem, SKILLS, buySkill, need, save, exportCode, importCode } from './story.js';
 import { OUTFITS, HAIRS, SKINS } from './actor.js';
 import { CHARS, GEAR, REGIONS, MAP_SIZE, sealsCount } from './regions.js';
 import { S, A, applyVolumes, TRACK_NAMES } from './audio.js';
@@ -74,7 +74,7 @@ export function panelHTML(kind, ctx) {
       <div class="row"><span class="lab">Langue</span><div class="opts"><button class="opt on">Français</button></div></div>
       <div class="row"><span class="lab">Interface en jeu</span><div class="opts">${o('hud', 1, 'Visible', st.hud)}${o('hud', 0, 'Masquée', !st.hud)}</div></div>
       <h3 style="margin:26px 0 12px;font-size:12px;letter-spacing:.3em;color:var(--gold)">COMMANDES</h3>
-      <div class="keys"><b>ZQSD · flèches</b><span>se déplacer</span><b>Souris</b><span>caméra (clic pour la capturer, Échap pour la libérer)</span><b>Maj</b><span>courir</span><b>Alt · C</b><span>marcher</span><b>Espace</b><span>sauter, esquiver en combat</span><b>Clic gauche</b><span>attaque rapide (enchaînement)</span><b>Clic droit</b><span>attaque lourde</span><b>F</b><span>garde ; juste avant l'impact : parade</span><b>Q</b><span>technique (50 d'énergie)</span><b>R</b><span>ultime (100 d'énergie)</span><b>Tab · clic molette</b><span>verrouiller une cible</span><b>E</b><span>interagir, parler</span><b>Espace · Ctrl</b><span>nager en surface · plonger (surveille ton souffle)</span><b>1 · 2</b><span>onigiri · thé</span><b>M · J · I · K</b><span>carte · journal · inventaire · compétences</span><b>Molette</b><span>distance de la caméra</span><b>Échap</b><span>pause</span></div>
+      <div class="keys"><b>ZQSD · flèches</b><span>se déplacer</span><b>Souris</b><span>caméra (clic pour la capturer, Échap pour la libérer)</span><b>Maj</b><span>courir</span><b>Alt · C</b><span>marcher</span><b>Espace</b><span>sauter, esquiver en combat</span><b>Clic gauche</b><span>attaque rapide (enchaînement)</span><b>Clic droit</b><span>attaque lourde</span><b>F</b><span>garde ; juste avant l'impact : parade</span><b>Q</b><span>technique (50 d'énergie)</span><b>R</b><span>ultime (100 d'énergie)</span><b>Tab · clic molette</b><span>verrouiller une cible</span><b>E</b><span>interagir, parler</span><b>T</b><span>discuter librement avec un habitant</span><b>Espace · Ctrl</b><span>nager en surface · plonger (surveille ton souffle)</span><b>1 · 2</b><span>onigiri · thé</span><b>M · J · I · K</b><span>carte · journal · inventaire · compétences</span><b>Molette</b><span>distance de la caméra</span><b>Échap</b><span>pause</span></div>
       <div class="h2sub" style="margin-top:14px">Les touches suivent la position physique : ZQSD sur un clavier AZERTY, WASD sur un clavier QWERTY.</div>
       <div class="h2sub" style="margin-top:8px">Certains mots anciens, tapés en jeu, réveillent des bénédictions. Les murs des dix dojos en connaissent plus d'un.</div>
       ${ctx === 'pause' ? `<h3 style="margin:26px 0 12px;font-size:12px;letter-spacing:.3em;color:var(--gold)">CODE DE SAUVEGARDE</h3><div class="h2sub">Copie ce code pour garder ta partie si le navigateur efface ses données.</div><textarea id="savecode" readonly></textarea><button class="opt" data-g="code" data-v="gen" style="margin-top:8px">Générer le code</button>` : `<h3 style="margin:26px 0 12px;font-size:12px;letter-spacing:.3em;color:var(--gold)">IMPORTER UNE PARTIE</h3><textarea id="importcode" placeholder="Colle ici un code de sauvegarde"></textarea><button class="opt" data-g="code" data-v="imp" style="margin-top:8px">Importer</button>`}
@@ -211,9 +211,23 @@ export function showHelp(html, t = 26) { $('help').innerHTML = html; $('help').c
 
 /* ---------- dialogue ---------- */
 G.on('dialog', () => {
-  const d = ST.dialog; $('dialog').classList.toggle('hide', !d); if (!d) return;
+  const d = ST.dialog; $('dialog').classList.toggle('hide', !d);
+  if (!d) { $('dfree').classList.add('hide'); $('dinput').blur(); return; }
   const line = d.lines[d.i]; $('dwho').textContent = line.who; $('dch').innerHTML = '';
+  const free = !!d.free;
+  $('dfree').classList.toggle('hide', !free);
+  $('dmore').textContent = free ? 'Entrée pour envoyer · ÉCHAP pour quitter' : 'E · ESPACE · CLIC';
+  if (free) { $('dinput').placeholder = `Parler à ${d.npc ? d.npc.name : '…'}…`; $('dinput').focus(); setTimeout(() => { if (ST.dialog?.free) $('dinput').focus(); }, 40); }
   if (d.i === d.lines.length - 1 && d.choices) d.choices.forEach((c, i) => { const b = document.createElement('button'); b.textContent = `${i + 1}.  ${c.t}`; b.onclick = (ev) => { ev.stopPropagation(); S.ui(); dialogNext(i); }; $('dch').appendChild(b); });
+});
+$('dfree').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = $('dinput'), text = input.value.trim();
+  if (!text) return;
+  input.value = ''; S.ui(); dialogSay(text);
+});
+$('dinput').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.preventDefault(); closeDialog(); }
 });
 export function dialogDraw() { const d = ST.dialog; if (!d) return; const line = d.lines[d.i]; $('dtxt').textContent = line.text.slice(0, Math.floor(d.chars)); $('dmore').style.opacity = d.chars >= line.text.length && !(d.choices && d.i === d.lines.length - 1) ? 1 : 0; }
 

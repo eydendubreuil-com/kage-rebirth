@@ -20,6 +20,9 @@ const _a = V(), _b = V(), _c = V(), _ray = new THREE.Ray(), _box = new THREE.Box
 export function initInput(canvas) {
   const k = G.keys;
   addEventListener('keydown', (e) => {
+    /* le champ de discussion libre ne doit jamais déclencher les contrôles du jeu */
+    const tag = e.target && e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
     if (e.repeat) { if (['Tab', 'Space'].includes(e.code)) e.preventDefault(); return; }
     k[e.code] = true; G.taps[e.code] = true;
     if (['Tab', 'Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
@@ -56,24 +59,37 @@ export function clearTaps() { G.taps = {}; }
 
 /* ============================ COLLISIONS ============================ */
 export function collide(p, r, feet, h = 1.7) {
-  /* troncs, rochers et poteaux : indexés par cellules pour rester fluides */
-  if (W.circleGrid && W.circleGrid.size) {
-    const gx = Math.floor(p.x / 16), gz = Math.floor(p.z / 16);
-    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
-      const arr = W.circleGrid.get((gx + i) + ',' + (gz + j)); if (!arr) continue;
-      for (const c of arr) {
-        const dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz), rad = r + c.r;
-        if (d < rad && d > 1e-4) { p.x += dx / d * (rad - d); p.z += dz / d * (rad - d); }
+  /* deux passes : un coin de mur ne doit jamais recracher le joueur de l'autre côté */
+  for (let pass = 0; pass < 2; pass++) {
+    /* troncs, rochers et poteaux : indexés par cellules pour rester fluides */
+    if (W.circleGrid && W.circleGrid.size) {
+      const gx = Math.floor(p.x / 16), gz = Math.floor(p.z / 16);
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+        const arr = W.circleGrid.get((gx + i) + ',' + (gz + j)); if (!arr) continue;
+        for (const c of arr) {
+          if (feet >= c.y1 - 0.05 || feet + h <= c.y0) continue;
+          const dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz), rad = r + c.r;
+          if (d < rad && d > 1e-4) { p.x += dx / d * (rad - d); p.z += dz / d * (rad - d); }
+        }
       }
     }
+    for (const c of W.colliders) {
+      if (feet >= c.y1 - 0.05 || feet + h <= c.y0) continue;
+      if (p.x < c.x0 - r || p.x > c.x1 + r || p.z < c.z0 - r || p.z > c.z1 + r) continue;
+      const nx = clamp(p.x, c.x0, c.x1), nz = clamp(p.z, c.z0, c.z1), dx = p.x - nx, dz = p.z - nz, d = Math.hypot(dx, dz);
+      if (d > 1e-5) { if (d < r) { p.x += dx / d * (r - d); p.z += dz / d * (r - d); } }
+      else { const l = p.x - c.x0, rr2 = c.x1 - p.x, f = p.z - c.z0, b = c.z1 - p.z, m = Math.min(l, rr2, f, b);
+        if (m === l) p.x = c.x0 - r; else if (m === rr2) p.x = c.x1 + r; else if (m === f) p.z = c.z0 - r; else p.z = c.z1 + r; }
+    }
   }
-  for (const c of W.colliders) {
-    if (feet >= c.y1 - 0.05 || feet + h <= c.y0) continue;
-    if (p.x < c.x0 - r || p.x > c.x1 + r || p.z < c.z0 - r || p.z > c.z1 + r) continue;
-    const nx = clamp(p.x, c.x0, c.x1), nz = clamp(p.z, c.z0, c.z1), dx = p.x - nx, dz = p.z - nz, d = Math.hypot(dx, dz);
-    if (d > 1e-5) { if (d < r) { p.x += dx / d * (r - d); p.z += dz / d * (r - d); } }
-    else { const l = p.x - c.x0, rr2 = c.x1 - p.x, f = p.z - c.z0, b = c.z1 - p.z, m = Math.min(l, rr2, f, b);
-      if (m === l) p.x = c.x0 - r; else if (m === rr2) p.x = c.x1 + r; else if (m === f) p.z = c.z0 - r; else p.z = c.z1 + r; }
+}
+/* déplacement balayé : aucun mur mince ne peut être traversé même à 11 m/s */
+function moveBody(f, dx, dz) {
+  const dist = Math.hypot(dx, dz); if (dist < 1e-6) return;
+  const steps = Math.min(32, Math.max(1, Math.ceil(dist / 0.16)));
+  for (let i = 0; i < steps; i++) {
+    f.pos.x += dx / steps; f.pos.z += dz / steps;
+    collide(f.pos, f.radius, f.pos.y);
   }
 }
 function camBlock(from, to) {
@@ -272,8 +288,9 @@ function playerUpdate(dt, rdt) {
   if (pl.hurtT > 0 || pl.downT > 0) tv.copy(pl.vel).multiplyScalar(0.9);
   const acc = pl.inWater ? 5 : (pl.onGround ? (pl.action || pl.dashT > 0 ? 30 : 11) : 3);
   pl.vel.x = damp(pl.vel.x, tv.x, acc, dt); pl.vel.z = damp(pl.vel.z, tv.z, acc, dt);
-  pl.pos.x += pl.vel.x * dt; pl.pos.z += pl.vel.z * dt;
-  collide(pl.pos, pl.radius, pl.pos.y); for (const e of G.enemies) if (!e.dead) sep(pl, e, 0.8); for (const n of G.npcs) if (n.actor.root.visible) sep(pl, n, 0.7, true);
+  moveBody(pl, pl.vel.x * dt, pl.vel.z * dt);
+  for (const e of G.enemies) if (!e.dead) sep(pl, e, 0.8); for (const n of G.npcs) if (n.actor.root.visible) sep(pl, n, 0.7, true);
+  collide(pl.pos, pl.radius, pl.pos.y);
   const r = Math.hypot(pl.pos.x, pl.pos.z); if (r > 880) { pl.pos.x *= 880 / r; pl.pos.z *= 880 / r; if (!pl.edgeT || performance.now() - pl.edgeT > 8000) { pl.edgeT = performance.now(); notify('Les remparts du monde se perdent dans la brume. Les dix vallées sont devant toi.', 'place'); } }
   if (pl.inWater) {
     const g = groundAt(pl.pos.x, pl.pos.z, pl.pos.y + 3);
@@ -468,8 +485,9 @@ function enemyUpdate(e, dt) {
   if (e.dashT > 0) tv.copy(e.dashDir).multiplyScalar(9);
   if (e.hurtT > 0 || e.downT > 0) tv.copy(e.vel).multiplyScalar(0.88);
   e.vel.x = damp(e.vel.x, tv.x, e.action ? 30 : 9, dt); e.vel.z = damp(e.vel.z, tv.z, e.action ? 30 : 9, dt);
-  e.pos.x += e.vel.x * dt; e.pos.z += e.vel.z * dt; collide(e.pos, e.radius, e.pos.y);
+  moveBody(e, e.vel.x * dt, e.vel.z * dt);
   for (const o of G.enemies) if (o !== e && !o.dead) sep(e, o, 1.0);
+  collide(e.pos, e.radius, e.pos.y);
   e.ground(dt); e.speed = Math.hypot(e.vel.x, e.vel.z);
   if (e.glint > 0) e.glint -= dt;
   stepAction(e, dt);
@@ -478,7 +496,7 @@ function enemyUpdate(e, dt) {
 /* ============================ HABITANTS ============================ */
 export function spawnNPC(def) {
   const actor = new Actor(G.scene, Object.assign({ chains: false, sword: false, scarf: false }, def.look));
-  const n = { def, actor, pos: V(def.x, groundAt(def.x, def.z).h, def.z), yaw: def.yaw || 0, path: def.path || null, pi: 0, wait: rr(0, 3), speed: 0, bubbleT: 0, home: def.home || null, visible: true, name: def.name, talkable: def.talkable !== false };
+  const n = { uid: (def.id || 'npc') + '#' + G.npcs.length, def, actor, pos: V(def.x, groundAt(def.x, def.z).h, def.z), yaw: def.yaw || 0, path: def.path || null, pi: 0, wait: rr(0, 3), speed: 0, bubbleT: 0, home: def.home || null, visible: true, name: def.name, talkable: def.talkable !== false };
   actor.root.position.copy(n.pos); G.npcs.push(n); return n;
 }
 function npcUpdate(n, dt, hour) {

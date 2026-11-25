@@ -7,7 +7,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { W, buildWorld, updateWorld, groundAt, terrainH, inWater, RIVER } from './world.js';
 import { G, initInput, initCamera, initFx, createPlayer, gameUpdate, tap, clearTaps, notify, spawnEnemy, clearEnemies, setLook, setCharacter, hpMaxOf } from './game.js';
-import { ST, QUESTS, populate, storyUpdate, cutUpdate, dialogUpdate, dialogNext, dialog, findInteract, interact, introCut, save, hasSave, readSave, applySave, startQuest, animalsUpdate, resetNPCs, putSave, readSave as readLocal, useItem, buySkill, importCode, exportCode } from './story.js';
+import { ST, QUESTS, populate, storyUpdate, cutUpdate, dialogUpdate, dialogNext, closeDialog, dialog, findInteract, interact, freeTalk, introCut, save, hasSave, readSave, applySave, startQuest, animalsUpdate, resetNPCs, putSave, readSave as readLocal, useItem, buySkill, importCode, exportCode } from './story.js';
 import { UI, loadProgress, hideLoad, toast, showTitle, refreshMenu, setTrack, openPanel, closePanel, pauseOpen, pauseClose, pauseTab, hudUpdate, showHelp, dialogDraw, cine, subs, card, fade, lore, loreClose } from './ui.js';
 import { A, S, audioInit, applyVolumes, music, ambience, TRACK_NAMES } from './audio.js';
 let _C = { CLOUD: { ready: false, user: null, error: 'La connexion en ligne est indisponible pour le moment.' }, cloudInit() {}, cloudSave() {}, cloudLoad: async () => null, signIn: async () => ({ error: 'Indisponible.' }), signOut() {}, onCloud() {} };
@@ -56,7 +56,7 @@ async function boot() {
   resize();
   try {
     await buildWorld(scene, renderer, Q, loadProgress);
-    loadProgress('Habitants du village', 0.97); await new Promise(r => setTimeout(r, 0));
+    loadProgress('Habitants du village', 0.97); if (document.visibilityState !== 'hidden') await new Promise(r => setTimeout(r, 0));
     initCamera(camera); initFx(scene); initInput(canvas);
     createPlayer(scene, G.savedLook);
     populate();
@@ -65,7 +65,8 @@ async function boot() {
     titleSetup(); renderer.compile(scene, camera);
     loadProgress('Prêt', 1);
   } catch (e) { console.error(e); document.getElementById('loadl').textContent = 'Erreur au chargement : ' + e.message; return; }
-  setTimeout(() => { hideLoad(); if (G.mode === 'title') showTitle(true); refreshMenu(hasSave()); }, 250);
+  const ready = () => { hideLoad(); if (G.mode === 'title') showTitle(true); refreshMenu(hasSave()); };
+  if (document.visibilityState === 'hidden') ready(); else setTimeout(ready, 250);
   last = performance.now(); requestAnimationFrame(loop);
 }
 
@@ -107,7 +108,7 @@ function resetGame() {
 function enterPlay() { closePanel(); showTitle(false); G.camOverride = null; G.mode = 'play'; G.cam.yaw = G.pl.yaw; G.cam.pitch = 0.22; clearTaps(); }
 function newGame() {
   audioInit(); resetGame(); enterPlay(); cine(true); music('aube'); introCut();
-  showHelp('<b>ZQSD</b> se déplacer · <b>Souris</b> caméra (clic pour capturer, Échap libère)<br><b>Maj</b> courir · <b>Espace</b> sauter, esquiver en combat · <b>E</b> parler, agir<br><b>Clic gauche</b> attaque rapide · <b>Clic droit</b> attaque lourde · <b>F</b> garde et parade<br><b>Espace</b> nager en surface · <b>Ctrl / C</b> plonger : ton souffle est compté<br><b>Tab</b> verrouiller · <b>M</b> carte · <b>J</b> journal · <b>I</b> inventaire · <b>Échap</b> pause<br>Dix dojos t\'attendent. Certains mots anciens, tapés en jeu, réveillent des bénédictions…', 46);
+  showHelp('<b>ZQSD</b> se déplacer · <b>Souris</b> caméra (clic pour capturer, Échap libère)<br><b>Maj</b> courir · <b>Espace</b> sauter, esquiver en combat · <b>E</b> parler, agir · <b>T</b> discuter librement<br><b>Clic gauche</b> attaque rapide · <b>Clic droit</b> attaque lourde · <b>F</b> garde et parade<br><b>Espace</b> nager en surface · <b>Ctrl / C</b> plonger : ton souffle est compté<br><b>Tab</b> verrouiller · <b>M</b> carte · <b>J</b> journal · <b>I</b> inventaire · <b>Échap</b> pause<br>Dix dojos t\'attendent. Certains mots anciens, tapés en jeu, réveillent des bénédictions…', 46);
 }
 function continueGame() { const d = readSave(); if (!d) return; audioInit(); resetGame(); applySave(d); enterPlay(); toast('Partie chargée'); }
 function training() {
@@ -211,13 +212,19 @@ function loop(now) {
   else if (G.mode === 'play') {
     inter = findInteract();
     if (tap('KeyE') && inter) { interact(inter); S.ui(); }
+    if (!G.training && tap('KeyT')) {
+      let near = null, nd = 3.4;
+      for (const n of G.npcs) if (n.talkable && n.actor.root.visible && !n.duel) { const d = Math.hypot(n.pos.x - pl.pos.x, n.pos.z - pl.pos.z); if (d < nd) { nd = d; near = n; } }
+      if (near) { freeTalk(near); S.ui(); } else toast('Approche un habitant pour discuter librement.');
+    }
     if (tap('KeyM')) pauseOpen('map'); if (tap('KeyJ')) pauseOpen('journal'); if (tap('KeyI')) pauseOpen('inv'); if (tap('KeyK')) pauseOpen('skills');
     if (tap('Escape') && !G.locked) pauseOpen('journal');
     if (tap('Digit1')) { if (!useItem('onigiri')) toast('Plus d\'onigiri.'); } if (tap('Digit2')) { if (!useItem('the')) toast('Plus de thé.'); }
     if (tap('KeyH')) { G.settings.hud = !G.settings.hud; }
     if (G.training && tap('KeyT')) { if (!G.enemies.some(e => e.tag === 'spar' && !e.dead)) { const D = W.dojo; const e = spawnEnemy('sparring', 2, D.cz - 3, { tag: 'spar', aggro: true }); e.actor.sheathe(false); toast('Un partenaire entre sur le tatami.'); } }
   } else if (G.mode === 'dialog') {
-    if (tap('KeyE') || tap('Space') || tap('Enter') || tap('LMB')) dialogNext();
+    if (tap('Escape')) closeDialog();
+    else if (tap('KeyE') || tap('Space') || tap('Enter') || tap('LMB')) dialogNext();
     for (let i = 1; i <= 5; i++) if (tap('Digit' + i)) dialogNext(i - 1);
   } else if (G.mode === 'pause') { if (tap('Escape')) pauseClose(); }
   else if (G.mode === 'title') { if (tap('Escape') && UI.panel) closePanel(); }
@@ -251,7 +258,7 @@ function loop(now) {
 }
 
 /* points d'entrée pour les tests automatisés */
-window.KAGE = { G, W, ST, QUESTS, REGIONS, CHARS, newGame, continueGame, training, save, startQuest, spawnEnemy, setCharacter, setTime: (h) => { W.time = h; }, weather: (k) => { W.weather.target = k; W.weather.t = 0; }, teleport: (id) => { const r = REGIONS.find(x => x.id === id); if (r) { G.pl.pos.set(r.gatePos.x, groundAt(r.gatePos.x, r.gatePos.z, 99).h, r.gatePos.z); G.pl.vel.set(0, 0, 0); } }, menuAction, pauseAction, option, info: () => ({ mode: G.mode, fps: G.fps, pos: G.pl && [G.pl.pos.x.toFixed(1), G.pl.pos.y.toFixed(1), G.pl.pos.z.toFixed(1)], hp: G.pl && G.pl.hp, oxygen: G.pl && G.pl.oxygen, region: G.region && G.region.id, seals: sealsCount(ST.seals), quest: ST.quests.main1, enemies: G.enemies.length, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }) };
+window.KAGE = { G, W, ST, QUESTS, REGIONS, CHARS, newGame, continueGame, training, save, startQuest, spawnEnemy, setCharacter, freeTalk, closeDialog, setTime: (h) => { W.time = h; }, weather: (k) => { W.weather.target = k; W.weather.t = 0; }, teleport: (id) => { const r = REGIONS.find(x => x.id === id); if (r) { G.pl.pos.set(r.gatePos.x, groundAt(r.gatePos.x, r.gatePos.z, 99).h, r.gatePos.z); G.pl.vel.set(0, 0, 0); } }, menuAction, pauseAction, option, info: () => ({ mode: G.mode, fps: G.fps, pos: G.pl && [G.pl.pos.x.toFixed(1), G.pl.pos.y.toFixed(1), G.pl.pos.z.toFixed(1)], hp: G.pl && G.pl.hp, oxygen: G.pl && G.pl.oxygen, region: G.region && G.region.id, seals: sealsCount(ST.seals), quest: ST.quests.main1, enemies: G.enemies.length, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }) };
 boot();
 
 /* ---------- compte en ligne ---------- */

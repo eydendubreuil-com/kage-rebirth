@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { W, groundAt, terrainH, MAP } from './world.js';
 import { G, spawnNPC, spawnEnemy, spawnBoss, spawnRegionFoe, clearEnemies, notify, slowmo, setLook, hpMaxOf, setCharacter, tap, clearTaps, sparks, ring } from './game.js';
+import { greet as npcGreet, replyTo as npcReply, exportMinds, importMinds, clearMinds } from './npc-ai.js';
 import { Actor, MOVES, Cat, OUTFITS } from './actor.js';
 import { S, music } from './audio.js';
 import { REGIONS, regionOf, CHARS, GEAR, sealsCount, MAP_SIZE } from './regions.js';
@@ -239,6 +240,7 @@ function kata(n) { n.ki = Math.floor(R() * 3); n.kt = rr(0, 2); n.stance = 'guar
   if (!n2.action) { n2.kt -= dt; if (n2.kt <= 0) n2.action = { move: ['l1', 'l2', 'l3'][n2.ki++ % 3], t: 0 }; }
   else { n2.action.t += dt * 0.75; if (n2.action.t > MOVES[n2.action.move].dur) { n2.action = null; n2.kt = n2.ki % 3 === 0 ? 1.6 : 0.35; } } }; }
 export function resetNPCs() {
+  clearMinds();
   if (NPC.akira) { NPC.akira.hidden = false; NPC.akira.duel = false; NPC.akira.hold = false; }
   for (const id in NPC) { const n = NPC[id]; if (n && n.def && n.def.reg) { n.hidden = false; n.duel = false; n.hold = false; } }
   if (NPC.rei) NPC.rei.show = false; ST.drill = null;
@@ -336,10 +338,23 @@ export function talk(n) {
     lines = [L('Raizo, le forgeron', 'Ta lame a été forgée dans le nord. Bon acier. Garde-la sèche et elle te gardera en vie.'), L('Raizo, le forgeron', 'Si tu trouves les forges des autres vallées, demande-leur une lame plus lourde. Tu en auras besoin.')];
   } else if (id === 'innkeeper') {
     openShop(n.def.shop, n);
-  } else {
-    const b = n.def.barks || ['…']; lines = [L(n.name, b[Math.floor(R() * b.length)])];
-  }
+  } else return freeTalk(n);
   dialog(lines, choices, after, n);
+}
+
+/* ---------- discussion libre : chaque habitant a son esprit ---------- */
+export function freeTalk(n) {
+  if (!n || n.talkable === false) return;
+  const g = npcGreet(n, ST);
+  dialog([L(n.name, g.text, g.emo)], g.choices, null, n, { free: true });
+}
+export function dialogSay(text) {
+  const d = ST.dialog; if (!d || !d.free || !d.npc) return;
+  const t = String(text || '').trim().slice(0, 180); if (!t) return;
+  const r = npcReply(d.npc, t, ST);
+  d.lines = [L('Sora', t, 'neutre'), L(d.npc.name, r.text, r.emo)];
+  d.i = 0; d.chars = 0; d.choices = r.choices; d.free = true;
+  G.emit('dialog'); clearTaps();
 }
 
 /* ---------- maîtres des neuf dojos ---------- */
@@ -428,14 +443,19 @@ function buyItem(id, price) {
   pl.ryo -= price; pl.inv[id] = (pl.inv[id] || 0) + 1; S.coin(); notify(ITEMS[id].name + ' acheté'); save();
 }
 
-export function dialog(lines, choices, after, npc) {
-  ST.dialog = { lines, i: 0, choices, after, npc, chars: 0 }; G.mode = 'dialog'; G.pl.vel.set(0, 0, 0);
+export function dialog(lines, choices, after, npc, opts = {}) {
+  ST.dialog = { lines, i: 0, choices, after, npc, chars: 0, free: !!opts.free }; G.mode = 'dialog'; G.pl.vel.set(0, 0, 0);
   if (npc) { npc.hold = true; npc.yaw = Math.atan2(G.pl.pos.x - npc.pos.x, G.pl.pos.z - npc.pos.z); G.pl.yaw = Math.atan2(npc.pos.x - G.pl.pos.x, npc.pos.z - G.pl.pos.z); }
   if (document.pointerLockElement) document.exitPointerLock();
   G.emit('dialog'); clearTaps();
 }
+export function closeDialog() {
+  const d = ST.dialog; if (!d) return;
+  ST.dialog = null; if (d.npc) d.npc.hold = false; G.mode = 'play'; G.camOverride = null; G.emit('dialog');
+}
 export function dialogNext(choice) {
   const d = ST.dialog; if (!d) return;
+  if (d.free && d.choices && choice !== undefined && d.choices[choice]?.say) { dialogSay(d.choices[choice].say); return; }
   const line = d.lines[d.i];
   if (line && d.chars < line.text.length) { d.chars = line.text.length; return; }
   if (d.i < d.lines.length - 1) { d.i++; d.chars = 0; G.emit('dialog'); return; }
@@ -653,7 +673,7 @@ export function snapshot() {
     quests: ST.quests, disc: ST.disc, scrolls: ST.scrolls, flags: ST.flags, fog: Array.from(ST.fog), unlocks: ST.unlocks, seals: ST.seals, chars: ST.chars,
     relics: ST.relics, braziers: ST.braziers, bowed: ST.bowed, altars: ST.altars, ended: ST.ended,
     lit: W.interact.filter(i => i.kind === 'toro' && i.lit).map(i => i.id), relicsTaken: W.interact.filter(i => i.kind === 'relic' && i.taken).map(i => i.id), braziersLit: W.interact.filter(i => i.kind === 'brazier' && i.lit).map(i => i.id),
-    track: ST.track, rest: ST.rest, counts: { maki: Array.from(ST.counts.maki), parry: ST.counts.parry, kills: ST.counts.kills } };
+    track: ST.track, rest: ST.rest, counts: { maki: Array.from(ST.counts.maki), parry: ST.counts.parry, kills: ST.counts.kills }, minds: exportMinds() };
 }
 export function save(quiet) {
   if (G.training || G.mode === 'title') return false;
@@ -692,6 +712,7 @@ export function applySave(d) {
   for (const k in ST.flags) if (k.startsWith('duelOn_') || k === 'duelOn') ST.flags[k] = false;
   clearEnemies();
   resetNPCs();
+  importMinds(d.minds);
   /* si on recharge en pleine épreuve, les hommes de main encore vivants reviennent */
   for (const reg of REGIONS) {
     if (reg.built) continue;
