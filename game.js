@@ -8,7 +8,7 @@ import { clamp, lerp, damp, dampAngle, angDiff, rr, R, T } from './util.js';
 
 export const G = {
   mode: 'boot', ts: 1, hitstop: 0, slow: { t: 0, scale: 1 }, keys: {}, mouse: { l: false, r: false }, taps: {}, locked: false,
-  settings: { sens: 1, invertY: false, quality: 'moyenne', res: 1, fpsCap: 0, sub: true, hud: true },
+  settings: { sens: 1, invertY: false, quality: 'moyenne', res: 1, fpsCap: 0, sub: true, hud: true, contrast: 'normal', sharpness: 0.35 },
   enemies: [], npcs: [], cats: [], fx: [], listeners: {}, combatT: 0, dummiesHit: 0, msg: [], cam: null, camOverride: null, training: false,
   on(n, f) { (this.listeners[n] = this.listeners[n] || []).push(f); }, emit(n, d) { for (const f of this.listeners[n] || []) f(d); },
   secretBuf: '', konami: [], lastSecret: '', zone: null,

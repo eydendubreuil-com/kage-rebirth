@@ -61,6 +61,8 @@ export function polyDist(pts, x, z) {
 
 /* ---------- textures peintes ---------- */
 const TEX = {};
+let MAX_ANISO = 8;
+export function setMaxAnisotropy(v) { MAX_ANISO = Math.max(1, Math.min(16, v || 8)); return MAX_ANISO; }
 export function canvasTex(key, w, h, draw, rep = [1, 1], color = true) {
   if (TEX[key]) return TEX[key];
   const c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -68,7 +70,8 @@ export function canvasTex(key, w, h, draw, rep = [1, 1], color = true) {
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep[0], rep[1]);
   if (color) t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8; t.userData.canvas = c;
+  t.anisotropy = MAX_ANISO; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
+  t.userData.canvas = c;
   TEX[key] = t; return t;
 }
 /* carte de relief → carte de normales */
@@ -85,7 +88,8 @@ export function normalTex(key, src, strength = 2, rep = [1, 1]) {
     o[i] = (-dx / l * 0.5 + 0.5) * 255; o[i + 1] = (-dy / l * 0.5 + 0.5) * 255; o[i + 2] = (1 / l * 0.5 + 0.5) * 255; o[i + 3] = 255;
   }
   g.putImageData(out, 0, 0);
-  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep[0], rep[1]); t.anisotropy = 8;
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep[0], rep[1]); t.anisotropy = MAX_ANISO;
+  t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
   TEX[key] = t; return t;
 }
 function grain(g, w, h, amt, seed = 1) {

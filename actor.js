@@ -111,7 +111,23 @@ class Chain {
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion();
 const MAT_CACHE = new Map();
-function mat(key, f) { if (!MAT_CACHE.has(key)) MAT_CACHE.set(key, f()); return MAT_CACHE.get(key); }
+/* Contour sombre + liseré froid directement dans les matériaux des personnages :
+   aucun draw call supplémentaire, et les silhouettes restent lisibles sur les fonds clairs. */
+function actorShader(m) {
+  if (!m || !m.isMeshStandardMaterial || m.userData.__kageRim) return m;
+  m.userData.__kageRim = true;
+  m.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <dithering_fragment>', `
+      float ndv = clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
+      float edge = pow(1.0 - ndv, 2.1);
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.008, 0.009, 0.012), smoothstep(0.65, 0.98, edge) * 0.30);
+      gl_FragColor.rgb += vec3(0.10, 0.16, 0.23) * edge * 0.20;
+      #include <dithering_fragment>`);
+  };
+  m.customProgramCacheKey = () => 'kage-actor-rim-v1';
+  return m;
+}
+function mat(key, f) { if (!MAT_CACHE.has(key)) MAT_CACHE.set(key, actorShader(f())); return MAT_CACHE.get(key); }
 
 export class Actor {
   constructor(scene, o = {}) {

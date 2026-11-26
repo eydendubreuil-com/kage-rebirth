@@ -4,52 +4,109 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { W, buildWorld, updateWorld, groundAt, terrainH, inWater, RIVER } from './world.js';
 import { G, initInput, initCamera, initFx, createPlayer, gameUpdate, tap, clearTaps, notify, spawnEnemy, clearEnemies, setLook, setCharacter, hpMaxOf } from './game.js';
-import { ST, QUESTS, populate, storyUpdate, cutUpdate, dialogUpdate, dialogNext, closeDialog, dialog, findInteract, interact, freeTalk, introCut, save, hasSave, readSave, applySave, startQuest, animalsUpdate, resetNPCs, putSave, readSave as readLocal, useItem, buySkill, importCode, exportCode } from './story.js';
+import { ST, QUESTS, populate, storyUpdate, cutUpdate, dialogUpdate, dialogNext, closeDialog, dialog, findInteract, interact, freeTalk, introCut, regionArrival, save, hasSave, readSave, applySave, startQuest, animalsUpdate, resetNPCs, putSave, readSave as readLocal, useItem, buySkill, importCode, exportCode } from './story.js';
 import { UI, loadProgress, hideLoad, toast, showTitle, refreshMenu, setTrack, openPanel, closePanel, pauseOpen, pauseClose, pauseTab, hudUpdate, showHelp, dialogDraw, cine, subs, card, fade, lore, loreClose } from './ui.js';
 import { A, S, audioInit, applyVolumes, music, ambience, TRACK_NAMES } from './audio.js';
 let _C = { CLOUD: { ready: false, user: null, error: 'La connexion en ligne est indisponible pour le moment.' }, cloudInit() {}, cloudSave() {}, cloudLoad: async () => null, signIn: async () => ({ error: 'Indisponible.' }), signOut() {}, onCloud() {} };
 try { _C = await import('./cloud.js'); } catch (e) { console.warn('cloud.js indisponible', e); }
 const { CLOUD, cloudInit, cloudSave, cloudLoad, signIn, signOut, onCloud } = _C;
-import { polyDist, clamp, lerp, damp, easeInOut } from './util.js';
+import { polyDist, clamp, lerp, damp, easeInOut, setMaxAnisotropy } from './util.js';
 import { REGIONS, CHARS, MUSIC_BY_REGION, sealsCount } from './regions.js';
 import './secrets.js';
 
 const QUAL = {
-  basse: { terrainSeg: 170, trees: 650, grass: 7000, petals: 140, shadow: 1024, pr: 0.8, bloom: false, fogMul: 1.25, aa: false },
-  moyenne: { terrainSeg: 230, trees: 1300, grass: 17000, petals: 300, shadow: 2048, pr: 1.25, bloom: true, fogMul: 1, aa: true },
-  haute: { terrainSeg: 300, trees: 2100, grass: 34000, petals: 520, shadow: 4096, pr: 2, bloom: true, fogMul: 0.9, aa: true },
+  basse: { terrainSeg: 170, trees: 650, grass: 7000, petals: 140, shadow: 1024, pr: 1.0, bloom: false, post: false, fogMul: 1.18, aa: true, shadowEvery: 3 },
+  moyenne: { terrainSeg: 230, trees: 1300, grass: 17000, petals: 300, shadow: 2048, pr: 1.25, bloom: true, post: true, fogMul: 1, aa: false, shadowEvery: 2 },
+  haute: { terrainSeg: 300, trees: 2100, grass: 34000, petals: 520, shadow: 4096, pr: 2, bloom: true, post: true, fogMul: 0.9, aa: false, shadowEvery: 1 },
 };
 const SKEY = 'kage-rebirth-3d-settings';
 const qp = new URLSearchParams(location.search);
-try { const s = JSON.parse(localStorage.getItem(SKEY) || 'null'); if (s) { Object.assign(G.settings, s.settings || {}); Object.assign(A.vol, s.vol || {}); G.savedLook = s.look; } } catch (e) {}
- if (qp.get('q')) G.settings.quality = qp.get('q'); if (qp.get('r')) G.autoRes = +qp.get('r');
+let savedSettings = null;
+try { const s = JSON.parse(localStorage.getItem(SKEY) || 'null'); if (s) { savedSettings = s; Object.assign(G.settings, s.settings || {}); Object.assign(A.vol, s.vol || {}); G.savedLook = s.look; } } catch (e) {}
+/* Détection des machines modestes : pas de post-traitement lourd par défaut. */
+const lowDevice = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4;
+if (!savedSettings && !qp.get('q') && lowDevice) G.settings.quality = 'basse';
+if (qp.get('q')) G.settings.quality = qp.get('q'); if (qp.get('r')) G.autoRes = +qp.get('r');
 const Q = QUAL[G.settings.quality] || QUAL.moyenne;
 function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify({ settings: G.settings, vol: A.vol, look: G.pl ? G.pl.look : G.savedLook })); } catch (e) {} }
 
 /* ---------- rendu ---------- */
 const canvas = document.getElementById('c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: Q.aa, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: Q.aa && !Q.post, powerPreference: 'high-performance' });
 renderer.shadowMap.enabled = !qp.get('ns'); renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.outputColorSpace = THREE.SRGBColorSpace;
+/* une ombre sur deux en Moyenne : la scène est statique, les personnages restent nets */
+renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMappingExposure = 1.1;
+setMaxAnisotropy(renderer.capabilities.getMaxAnisotropy());
 const scene = new THREE.Scene(); G.scene = scene; G.renderer = renderer;
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.08, 6000);
-let composer, bloom, bokeh;
+let composer, bloom, fxaaPass, gradePass;
+const GradeShader = {
+  uniforms: {
+    tDiffuse: { value: null }, resolution: { value: new THREE.Vector2(1, 1) },
+    contrast: { value: 1.06 }, saturation: { value: 1.1 }, sharpness: { value: 0.35 }, vignette: { value: 0.1 },
+  },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform vec2 resolution;
+    uniform float contrast, saturation, sharpness, vignette; varying vec2 vUv;
+    void main(){
+      vec2 px = 1.0 / resolution;
+      vec4 c = texture2D(tDiffuse, vUv);
+      /* accentuation légère : difference avec un flou 4 voisins */
+      vec3 blur = (texture2D(tDiffuse, vUv + vec2(px.x, 0.0)).rgb + texture2D(tDiffuse, vUv - vec2(px.x, 0.0)).rgb
+                 + texture2D(tDiffuse, vUv + vec2(0.0, px.y)).rgb + texture2D(tDiffuse, vUv - vec2(0.0, px.y)).rgb) * 0.25;
+      vec3 col = c.rgb + (c.rgb - blur) * sharpness * 1.35;
+      col = (col - 0.5) * contrast + 0.5;
+      float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col = mix(vec3(lum), col, saturation);
+      float v = smoothstep(0.32, 0.82, length(vUv - 0.5));
+      col *= 1.0 - vignette * v;
+      gl_FragColor = vec4(max(col, 0.0), c.a);
+    }`,
+};
+function applyGrade() {
+  if (!gradePass) return;
+  const s = G.settings, u = gradePass.material.uniforms;
+  u.contrast.value = s.contrast === 'fort' ? 1.18 : 1.06;
+  u.saturation.value = s.contrast === 'fort' ? 1.16 : 1.1;
+  u.sharpness.value = clamp(+s.sharpness || 0, 0, 1);
+  u.vignette.value = 0.1;
+}
 function resize() {
-  const pr = Math.min(devicePixelRatio || 1, Q.pr) * G.settings.res * (G.autoRes || 1);
+  const pr = Math.max(0.5, Math.min(devicePixelRatio || 1, Q.pr) * G.settings.res * (G.autoRes || 1));
   renderer.setPixelRatio(pr); renderer.setSize(innerWidth, innerHeight, false);
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   if (composer) { composer.setPixelRatio(pr); composer.setSize(innerWidth, innerHeight); }
+  if (fxaaPass) fxaaPass.material.uniforms.resolution.value.set(1 / (innerWidth * pr), 1 / (innerHeight * pr));
+  if (gradePass) gradePass.material.uniforms.resolution.value.set(innerWidth * pr, innerHeight * pr);
 }
 addEventListener('resize', resize);
+function polishTextures() {
+  const seen = new Set(), keys = ['map', 'normalMap', 'emissiveMap', 'roughnessMap', 'metalnessMap', 'alphaMap', 'aoMap', 'bumpMap', 'displacementMap'];
+  scene.traverse(obj => {
+    const mats = obj.material ? (Array.isArray(obj.material) ? obj.material : [obj.material]) : [];
+    for (const m of mats) for (const k of keys) {
+      const t = m && m[k]; if (!t || seen.has(t)) continue; seen.add(t);
+      t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
+    }
+  });
+}
 function buildComposer() {
   composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera));
-  bokeh = new BokehPass(scene, camera, { focus: 4, aperture: 0.004, maxblur: 0.008 }); bokeh.enabled = false; if (G.settings.quality === 'haute') composer.addPass(bokeh);
-  bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.32, 0.55, 0.86); composer.addPass(bloom);
+  /* bloom volontairement faible : lanternes, éclairs, braises */
+  if (Q.bloom) { bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.1, 0.28, 1.0); composer.addPass(bloom); }
+  fxaaPass = new ShaderPass(FXAAShader); fxaaPass.material.uniforms.resolution.value.set(1 / (innerWidth * renderer.getPixelRatio()), 1 / (innerHeight * renderer.getPixelRatio())); composer.addPass(fxaaPass);
+  gradePass = new ShaderPass(GradeShader); composer.addPass(gradePass); applyGrade();
   composer.addPass(new OutputPass());
+  G.composer = composer; G.bloom = bloom; G.fxaaPass = fxaaPass; G.gradePass = gradePass;
 }
+G.on('settings', applyGrade);
 
 /* ---------- démarrage ---------- */
 async function boot() {
@@ -60,7 +117,8 @@ async function boot() {
     initCamera(camera); initFx(scene); initInput(canvas);
     createPlayer(scene, G.savedLook);
     populate();
-    if (Q.bloom) buildComposer();
+    polishTextures();
+    if (Q.post) buildComposer();
     W.time = 6.3; updateWorld(0.016, camera.position, scene, renderer, G.pl.pos, Q, false);
     titleSetup(); renderer.compile(scene, camera);
     loadProgress('Prêt', 1);
@@ -92,7 +150,7 @@ function resetGame() {
   clearEnemies(); const pl = G.pl;
   Object.assign(pl, { hp: 100, hpMax: 100, en: 30, level: 1, xp: 0, sp: 0, skills: {}, ryo: 40, inv: { onigiri: 2, the: 1 }, special: false, ult: false, lock: null, dead: false, combo: 0, action: null, climb: null, oxygen: 100, inWater: false, submerged: false, buffs: {}, gear: { lame: 0, armure: 0, bottes: 0 }, blessings: 0, char: 'sora' });
   setCharacter('sora'); pl.hpMax = hpMaxOf(pl); pl.hp = pl.hpMax; pl.en = 30; pl.lock = null;
-  ST.quests = {}; ST.disc = {}; ST.scrolls = {}; ST.flags = {}; ST.unlocks = {}; ST.track = 'main1';
+  ST.dialog = null; ST.cut = null; ST.day = 1; ST.lastTime = undefined; ST.quests = {}; ST.disc = {}; ST.scrolls = {}; ST.flags = {}; ST.unlocks = {}; ST.track = 'main1';
   ST.seals = {}; ST.chars = { sora: true }; ST.relics = {}; ST.braziers = {}; ST.bowed = {}; ST.altars = {}; ST.ended = false;
   ST.fog.fill(0); ST.counts.maki = new Set(); ST.counts.parry = 0; ST.counts.kills = {}; ST.rest = { x: 0, z: -72 };
   for (const it of W.interact) {
@@ -107,10 +165,20 @@ function resetGame() {
 }
 function enterPlay() { closePanel(); showTitle(false); G.camOverride = null; G.mode = 'play'; G.cam.yaw = G.pl.yaw; G.cam.pitch = 0.22; clearTaps(); }
 function newGame() {
-  audioInit(); resetGame(); enterPlay(); cine(true); music('aube'); introCut();
+  audioInit(); resetGame(); ST.flags.campArmed = true; enterPlay(); cine(true); music('aube'); introCut();
   showHelp('<b>ZQSD</b> se déplacer · <b>Souris</b> caméra (clic pour capturer, Échap libère)<br><b>Maj</b> courir · <b>Espace</b> sauter, esquiver en combat · <b>E</b> parler, agir · <b>T</b> discuter librement<br><b>Clic gauche</b> attaque rapide · <b>Clic droit</b> attaque lourde · <b>F</b> garde et parade<br><b>Espace</b> nager en surface · <b>Ctrl / C</b> plonger : ton souffle est compté<br><b>Tab</b> verrouiller · <b>M</b> carte · <b>J</b> journal · <b>I</b> inventaire · <b>Échap</b> pause<br>Dix dojos t\'attendent. Certains mots anciens, tapés en jeu, réveillent des bénédictions…', 46);
 }
 function continueGame() { const d = readSave(); if (!d) return; audioInit(); resetGame(); applySave(d); enterPlay(); toast('Partie chargée'); }
+function freeGame() {
+  audioInit(); resetGame();
+  ST.flags.freeRoam = true; ST.flags.campArmed = true; ST.track = 'main1';
+  ST.chars = { sora: true, akira: true, hana: true, rei: true };
+  for (const reg of REGIONS) ST.seals[reg.id] = true;
+  G.pl.pos.set(0, 0.3, 102); G.pl.yaw = Math.PI; G.pl.hp = G.pl.hpMax; G.pl.en = 100;
+  enterPlay(); music('jour'); W.time = 9.2; W.weather.target = 'clair';
+  toast('Exploration libre : les dix vallées, les dojos et les secrets sont ouverts.', 'place');
+  showHelp('<b>Mode exploration</b> · toute la carte est ouverte, sans obligation de quête.<br><b>ZQSD</b> se déplacer · <b>Maj</b> courir · <b>E</b> parler/agir · <b>T</b> discuter librement<br><b>Espace</b> sauter/esquiver · <b>Clic gauche / droit</b> attaquer · <b>F</b> garde<br><b>Tab</b> verrouiller · <b>M</b> carte · <b>J</b> journal · <b>I</b> inventaire · <b>Échap</b> pause', 34);
+}
 function training() {
   audioInit(); resetGame(); G.training = true; G.pl.special = true; G.pl.ult = true; G.pl.en = 100; G.pl.skills = { quatrieme: true };
   const D = W.dojo; G.pl.pos.set(0, D.y, D.cz + 6); G.pl.yaw = Math.PI; enterPlay(); music('dojo');
@@ -124,6 +192,7 @@ function menuAction(a) {
   if (a === 'new') { if (hasSave()) openPanel('confirmNew'); else newGame(); }
   if (a === 'continue') continueGame();
   if (a === 'worlds') openPanel('worlds'); if (a === 'perso') openPanel('perso'); if (a === 'settings') openPanel('settings'); if (a === 'credits') openPanel('credits');
+  if (a === 'free') freeGame();
   if (a === 'training') training();
   if (a === 'account') openAccount();
 }
@@ -140,7 +209,8 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('input', (e) => {
   const r = e.target.dataset?.r; if (!r) return; const v = parseFloat(e.target.value);
-  if (r === 'res') { G.settings.res = v; resize(); } else if (r === 'sens') G.settings.sens = v; else { A.vol[r] = v; applyVolumes(); }
+  if (r === 'res') { G.settings.res = v; resize(); } else if (r === 'sens') G.settings.sens = v;
+  else if (r === 'sharp') { G.settings.sharpness = v; applyGrade(); } else { A.vol[r] = v; applyVolumes(); }
   saveSettings();
 });
 function option(g, v, el) {
@@ -150,6 +220,7 @@ function option(g, v, el) {
     lk[g] = g === 'skin' ? +v : (['scarf', 'band', 'kasa', 'mask'].includes(g) ? v === '1' : v); setLook(lk); G.savedLook = pl.look; saveSettings();
   }
   else if (g === 'quality') { G.settings.quality = v; saveSettings(); toast('Qualité « ' + v + ' » enregistrée : elle s\'applique entièrement au prochain lancement.'); }
+  else if (g === 'contrast') { G.settings.contrast = v; applyGrade(); saveSettings(); toast(v === 'fort' ? 'Contraste fort activé.' : 'Contraste normal.'); }
   else if (g === 'fps') G.settings.fpsCap = +v; else if (g === 'inv') G.settings.invertY = v === '1'; else if (g === 'sub') G.settings.sub = v === '1'; else if (g === 'hud') G.settings.hud = v === '1';
   else if (g === 'code') { if (v === 'gen') document.getElementById('savecode').value = exportCode(); else { const d = importCode(document.getElementById('importcode').value); toast(d ? 'Partie importée : choisis Continuer.' : 'Code invalide.'); refreshMenu(hasSave()); } return; }
   saveSettings();
@@ -194,14 +265,18 @@ function loop(now) {
   const cap = G.settings.fpsCap; if (cap && now - last < 1000 / cap - 1) return;
   let rdt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
   fpsAcc += rdt; fpsN++; if (fpsAcc > 2) { const fps = fpsN / fpsAcc; G.fps = fps; fpsAcc = 0; fpsN = 0;
-    if (fps < 26 && G.mode !== 'title') { lowT++; if (lowT >= 2 && (G.autoRes || 1) > 0.55) { G.autoRes = (G.autoRes || 1) * 0.85; resize(); toast('Résolution réduite automatiquement pour garder le jeu fluide.'); lowT = 0; } } else lowT = 0; }
+    if (fps < 52 && G.mode !== 'title') { lowT++; if (lowT >= 2 && (G.autoRes || 1) > 0.65) { G.autoRes = Math.max(0.65, (G.autoRes || 1) * 0.9); resize(); toast('Résolution réduite automatiquement pour garder le jeu fluide.'); lowT = 0; } else if (lowT >= 2) lowT = 0; }
+  }
   const pl = G.pl;
   if (G.mode === 'title') { titleCam(rdt); W.time = 6.35 + Math.sin(now * 0.00005) * 0.05; }
   else if (G.mode === 'play') W.time = (W.time + rdt / 60) % 24;
+  if (renderer.shadowMap.enabled && (!Q.shadowEvery || G.frame % Q.shadowEvery === 0)) renderer.shadowMap.needsUpdate = true;
   const T0 = performance.now();
   if (G.mode !== 'pause') {
     gameUpdate(rdt); animalsUpdate(rdt);
     if (G.mode === 'play' || G.mode === 'dialog') storyUpdate(rdt);
+    /* première arrivée dans une vallée : une vraie scène, pas un simple texte de quête */
+    if (G.mode === 'play' && G.region && !G.training && !ST.flags.freeRoam) regionArrival(G.region);
     const shot = cutUpdate(rdt); if (shot) { subs(shot.sub); if (shot.title) card('', shot.sub); else card(null); }
     dialogUpdate(rdt); dialogDraw();
   }
@@ -251,14 +326,13 @@ function loop(now) {
   }
   hudUpdate(rdt, inter);
   /* rendu */
-  if (bokeh) { bokeh.enabled = (G.mode === 'cutscene' || G.mode === 'dialog'); if (bokeh.enabled) { const f = G.mode === 'dialog' && ST.dialog?.npc ? camera.position.distanceTo(ST.dialog.npc.pos) : 8; bokeh.uniforms.focus.value = f; } }
   const T3 = performance.now();
   if (!(qp.get('nr') && G.frame % 40)) { if (composer) composer.render(); else renderer.render(scene, camera); }
   G.prof = { jeu: Math.round(T1 - T0), monde: Math.round(T2 - T1), hud: Math.round(T3 - T2), rendu: Math.round(performance.now() - T3) };
 }
 
 /* points d'entrée pour les tests automatisés */
-window.KAGE = { G, W, ST, QUESTS, REGIONS, CHARS, newGame, continueGame, training, save, startQuest, spawnEnemy, setCharacter, freeTalk, closeDialog, setTime: (h) => { W.time = h; }, weather: (k) => { W.weather.target = k; W.weather.t = 0; }, teleport: (id) => { const r = REGIONS.find(x => x.id === id); if (r) { G.pl.pos.set(r.gatePos.x, groundAt(r.gatePos.x, r.gatePos.z, 99).h, r.gatePos.z); G.pl.vel.set(0, 0, 0); } }, menuAction, pauseAction, option, info: () => ({ mode: G.mode, fps: G.fps, pos: G.pl && [G.pl.pos.x.toFixed(1), G.pl.pos.y.toFixed(1), G.pl.pos.z.toFixed(1)], hp: G.pl && G.pl.hp, oxygen: G.pl && G.pl.oxygen, region: G.region && G.region.id, seals: sealsCount(ST.seals), quest: ST.quests.main1, enemies: G.enemies.length, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }) };
+window.KAGE = { G, W, ST, QUESTS, REGIONS, CHARS, newGame, continueGame, freeGame, training, save, startQuest, spawnEnemy, setCharacter, freeTalk, closeDialog, setTime: (h) => { W.time = h; }, weather: (k) => { W.weather.target = k; W.weather.t = 0; }, teleport: (id) => { const r = REGIONS.find(x => x.id === id); if (r) { G.pl.pos.set(r.gatePos.x, groundAt(r.gatePos.x, r.gatePos.z, 99).h, r.gatePos.z); G.pl.vel.set(0, 0, 0); } }, menuAction, pauseAction, option, info: () => ({ mode: G.mode, fps: G.fps, pos: G.pl && [G.pl.pos.x.toFixed(1), G.pl.pos.y.toFixed(1), G.pl.pos.z.toFixed(1)], hp: G.pl && G.pl.hp, oxygen: G.pl && G.pl.oxygen, region: G.region && G.region.id, seals: sealsCount(ST.seals), quest: ST.quests.main1, enemies: G.enemies.length, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }) };
 boot();
 
 /* ---------- compte en ligne ---------- */

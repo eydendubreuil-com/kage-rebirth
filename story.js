@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { W, groundAt, terrainH, MAP } from './world.js';
 import { G, spawnNPC, spawnEnemy, spawnBoss, spawnRegionFoe, clearEnemies, notify, slowmo, setLook, hpMaxOf, setCharacter, tap, clearTaps, sparks, ring } from './game.js';
-import { greet as npcGreet, replyTo as npcReply, exportMinds, importMinds, clearMinds } from './npc-ai.js';
+import { greet as npcGreet, replyTo as npcReply, ambientLine, exportMinds, importMinds, clearMinds } from './npc-ai.js';
 import { Actor, MOVES, Cat, OUTFITS } from './actor.js';
 import { S, music } from './audio.js';
 import { REGIONS, regionOf, CHARS, GEAR, sealsCount, MAP_SIZE } from './regions.js';
@@ -11,7 +11,7 @@ import { clamp, lerp, easeInOut, rr, R, T } from './util.js';
 const FOGN = 64;
 export const ST = {
   quests: {}, main: 'main1', disc: {}, scrolls: {}, flags: {}, fog: new Uint8Array(FOGN * FOGN), dialog: null, cut: null, unlocks: {},
-  rest: { x: 0, z: -72 }, counts: { maki: new Set(), parry: 0, kills: {} }, track: 'main1', seals: {}, chars: { sora: true }, relics: {}, braziers: {}, bowed: {}, altars: {}, ended: false,
+  rest: { x: 0, z: -72 }, counts: { maki: new Set(), parry: 0, kills: {} }, track: 'main1', seals: {}, chars: { sora: true }, relics: {}, braziers: {}, bowed: {}, altars: {}, ended: false, day: 1,
 };
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const NPC = {};
@@ -352,8 +352,10 @@ export function dialogSay(text) {
   const d = ST.dialog; if (!d || !d.free || !d.npc) return;
   const t = String(text || '').trim().slice(0, 180); if (!t) return;
   const r = npcReply(d.npc, t, ST);
+  /* On garde la phrase du joueur, mais la réponse s'affiche seule :
+     l'ancien code laissait le dialogue bloqué sur « Sora : ... » et on croyait que le PNJ ne répondait pas. */
   d.lines = [L('Sora', t, 'neutre'), L(d.npc.name, r.text, r.emo)];
-  d.i = 0; d.chars = 0; d.choices = r.choices; d.free = true;
+  d.i = 0; d.chars = 0; d.autoT = 0; d.choices = r.choices; d.free = true;
   G.emit('dialog'); clearTaps();
 }
 
@@ -468,6 +470,11 @@ export function dialogUpdate(dt) {
   const d = ST.dialog; if (!d) return;
   const line = d.lines[d.i]; const before = Math.floor(d.chars); d.chars = Math.min(line.text.length, d.chars + dt * 48);
   if (Math.floor(d.chars) > before && Math.floor(d.chars) % 3 === 0) S.voice(line.who === 'Sora' ? 1.2 : (line.who.includes('Yuki') ? 1.5 : 0.9));
+  /* réponse automatique : pas besoin de cliquer une seconde fois sur sa propre phrase */
+  if (d.free && d.i === 0 && d.lines.length > 1 && d.chars >= line.text.length) {
+    d.autoT = (d.autoT || 0) + dt;
+    if (d.autoT > 0.42) { d.i = 1; d.chars = 0; d.autoT = 0; G.emit('dialog'); }
+  }
   const sp = line.who === 'Sora' ? G.pl.actor : (d.npc ? d.npc.actor : null); if (sp) { sp.talking = d.chars < line.text.length ? 0.15 : 0; sp.emotion = line.emo || 'neutre'; }
   if (d.npc) {
     const a = d.npc.pos, b = G.pl.pos, spk = line.who === 'Sora' ? b : a, lis = line.who === 'Sora' ? a : b;
@@ -648,12 +655,51 @@ export function secretEndingCodex() {
   return ST.flags.ended ? 'Les dix dojos sont réunis. Le Null n\'est plus qu\'un souvenir.' : 'Le KAGE TRIAL n\'est pas un tournoi. C\'est une serrure.';
 }
 
+/* ============================ ARRIVÉE DANS UNE VALLÉE ============================ */
+/* Chaque vallée a sa première scène. Elle se déclenche une seule fois, à pied, en mode histoire. */
+export function regionArrival(reg) {
+  if (!reg || reg.built || !reg.dojoPos || G.training || ST.flags.freeRoam) return false;
+  if (G.mode !== 'play' || ST.cut || ST.dialog || ST.flags['seen_' + reg.id]) return false;
+  /* on ne coupe jamais un combat par une cinématique d'arrivée */
+  if (G.enemies.some(e => !e.dead && (e.aggro || e.pos.distanceTo(G.pl.pos) < 18))) return false;
+  ST.flags['seen_' + reg.id] = true;
+  const ch = reg.chapter || {};
+  const dojo = reg.dojoPos;
+  const a = reg.place(-38, 86), b = reg.place(0, 50), c = reg.place(0, 24);
+  const ay = Math.max(terrainH(a.x, a.z) + 20, reg.y + 18);
+  const intro = ch.intro || `${reg.name}. Le vent y porte encore les noms des anciens dojos.`;
+  const master = reg.master || 'Le maître';
+  cutscene([
+    { d: 5.2, from: { p: [a.x, ay, a.z], l: [dojo.x, reg.y + 3.2, dojo.z] }, to: { p: [b.x, reg.y + 10, b.z], l: [dojo.x, reg.y + 3.0, dojo.z] }, fov: 44, sub: intro, title: true },
+    { d: 4.4, from: { p: [c.x, reg.y + 3.2, c.z], l: [dojo.x, reg.y + 2.4, dojo.z] }, to: { p: [reg.place(0, 34).x, reg.y + 2.8, reg.place(0, 34).z], l: [dojo.x, reg.y + 2.2, dojo.z] }, fov: 38, sub: `${master} t'attend. Ici, on juge un voyageur à ce qu'il écoute avant de parler.` },
+  ], () => { notify('Nouvelle vallée : ' + reg.name, 'place'); save(); });
+  return true;
+}
+
 /* ============================ BOUCLE DE L'Histoire ============================ */
-let fogT = 0, saveT = 0;
+let fogT = 0, saveT = 0, ambientT = 4;
 export function storyUpdate(dt) {
   if (G.training) return;
   questTick(); campTick();
   const pl = G.pl;
+  /* conversations d'ambiance : les habitants se parlent et commentent le monde sans qu'on clique */
+  /* le mode histoire se compte en journées : une aube franchie, un nouveau jour. */
+  if (!ST.day) ST.day = 1;
+  if (ST.lastTime != null && W.time < ST.lastTime - 6) { ST.day++; notify('Jour ' + ST.day + ' · la vallée se réveille', 'place'); save(true); }
+  ST.lastTime = W.time;
+  if (G.mode === 'play' && !ST.dialog) {
+    ambientT -= dt;
+    if (ambientT <= 0) {
+      ambientT = rr(7, 12);
+      const near = G.npcs.filter(n => n.talkable && n.actor.root.visible && !n.duel && !n.away && Math.hypot(n.pos.x - pl.pos.x, n.pos.z - pl.pos.z) < 30);
+      if (near.length) {
+        const n = near[Math.floor(R() * near.length)];
+        const other = near.find(o => o !== n && Math.hypot(o.pos.x - n.pos.x, o.pos.z - n.pos.z) < 5);
+        G.emit('bubble', { n, text: ambientLine(n, ST, other) });
+        if (other) setTimeout(() => { if (other.actor.root.visible) G.emit('bubble', { n: other, text: ambientLine(other, ST, n) }); }, 1500);
+      }
+    }
+  }
   for (const p of W.pois) if (!ST.disc[p.id] && !p.hidden && Math.hypot(pl.pos.x - p.x, pl.pos.z - p.z) < p.r) { ST.disc[p.id] = true; notify('Lieu découvert : ' + p.name, 'place'); addXP(15); S.uiOk(); }
   fogT -= dt;
   if (fogT < 0) { fogT = 0.5; const cx = Math.floor((pl.pos.x + MAP_SIZE / 2) / (MAP_SIZE / FOGN)), cz = Math.floor((pl.pos.z + MAP_SIZE / 2) / (MAP_SIZE / FOGN)); for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const x = cx + i, z = cz + j; if (x >= 0 && z >= 0 && x < FOGN && z < FOGN) ST.fog[z * FOGN + x] = 1; } }
@@ -667,7 +713,7 @@ const KEY = 'kage-rebirth-3d-v1';
 let memSave = null;
 export function snapshot() {
   const pl = G.pl;
-  return { v: 2, t: Date.now(), pos: [pl.pos.x, pl.pos.y, pl.pos.z], yaw: pl.yaw, time: W.time, weather: W.weather.target,
+  return { v: 2, t: Date.now(), pos: [pl.pos.x, pl.pos.y, pl.pos.z], yaw: pl.yaw, time: W.time, day: ST.day || 1, weather: W.weather.target,
     pl: { hp: pl.hp, en: pl.en, level: pl.level, xp: pl.xp, sp: pl.sp, skills: pl.skills, ryo: pl.ryo, inv: pl.inv, special: pl.special, ult: pl.ult, char: pl.char, gear: pl.gear, blessings: pl.blessings, oxygen: pl.oxygen,
       look: { outfit: pl.look.outfit, hair: pl.look.hair, skin: pl.look.skin, scarf: pl.look.scarf, band: pl.look.band, kasa: pl.look.kasa, mask: pl.look.mask } },
     quests: ST.quests, disc: ST.disc, scrolls: ST.scrolls, flags: ST.flags, fog: Array.from(ST.fog), unlocks: ST.unlocks, seals: ST.seals, chars: ST.chars,
@@ -693,7 +739,7 @@ export function applySave(d) {
   if (d.pl.char && CHARS[d.pl.char]) { setCharacter(d.pl.char); }
   if (d.pl.look) setLook(d.pl.look);
   pl.hpMax = hpMaxOf(pl); pl.hp = Math.min(pl.hp, pl.hpMax);
-  pl.pos.set(d.pos[0], d.pos[1], d.pos[2]); pl.yaw = d.yaw; W.time = d.time;
+  pl.pos.set(d.pos[0], d.pos[1], d.pos[2]); pl.yaw = d.yaw; W.time = d.time; ST.day = d.day || 1; ST.lastTime = W.time;
   ST.quests = d.quests || {}; ST.disc = d.disc || {}; ST.scrolls = d.scrolls || {}; Object.assign(ST.flags, d.flags || {}); ST.unlocks = d.unlocks || {}; ST.track = d.track || 'main1'; ST.rest = d.rest || ST.rest;
   ST.seals = d.seals || {}; ST.chars = Object.assign({ sora: true }, d.chars || {}); ST.relics = d.relics || {}; ST.braziers = d.braziers || {}; ST.bowed = d.bowed || {}; ST.altars = d.altars || {}; ST.ended = !!d.ended;
   ST.counts.maki = new Set(d.counts?.maki || []); ST.counts.parry = d.counts?.parry || 0; ST.counts.kills = d.counts?.kills || {};

@@ -62,6 +62,8 @@ export function panelHTML(kind, ctx) {
     const rng = (id, v, min, max, step) => `<input type="range" data-r="${id}" min="${min}" max="${max}" step="${step}" value="${v}">`;
     return `<h2>設定</h2><div class="h2sub">Paramètres</div>
       <div class="row"><span class="lab">Qualité graphique</span><div class="opts">${['basse', 'moyenne', 'haute'].map(q => o('quality', q, QNAMES[q], st.quality === q)).join('')}</div></div>
+      <div class="row"><span class="lab">Contraste</span><div class="opts">${o('contrast', 'normal', 'Normal', (st.contrast || 'normal') === 'normal')}${o('contrast', 'fort', 'Fort', st.contrast === 'fort')}</div></div>
+      <div class="row"><span class="lab">Netteté</span>${rng('sharp', st.sharpness ?? 0.35, 0, 1, 0.05)}</div>
       <div class="row"><span class="lab">Résolution de rendu</span>${rng('res', st.res, 0.5, 1, 0.05)}</div>
       <div class="row"><span class="lab">Images par seconde</span><div class="opts">${[[30, '30'], [60, '60'], [0, 'Libre']].map(([v, l]) => o('fps', v, l, st.fpsCap === v)).join('')}</div></div>
       <div class="row"><span class="lab">Sensibilité de la caméra</span>${rng('sens', st.sens, 0.3, 2.5, 0.05)}</div>
@@ -78,14 +80,14 @@ export function panelHTML(kind, ctx) {
       <div class="h2sub" style="margin-top:14px">Les touches suivent la position physique : ZQSD sur un clavier AZERTY, WASD sur un clavier QWERTY.</div>
       <div class="h2sub" style="margin-top:8px">Certains mots anciens, tapés en jeu, réveillent des bénédictions. Les murs des dix dojos en connaissent plus d'un.</div>
       ${ctx === 'pause' ? `<h3 style="margin:26px 0 12px;font-size:12px;letter-spacing:.3em;color:var(--gold)">CODE DE SAUVEGARDE</h3><div class="h2sub">Copie ce code pour garder ta partie si le navigateur efface ses données.</div><textarea id="savecode" readonly></textarea><button class="opt" data-g="code" data-v="gen" style="margin-top:8px">Générer le code</button>` : `<h3 style="margin:26px 0 12px;font-size:12px;letter-spacing:.3em;color:var(--gold)">IMPORTER UNE PARTIE</h3><textarea id="importcode" placeholder="Colle ici un code de sauvegarde"></textarea><button class="opt" data-g="code" data-v="imp" style="margin-top:8px">Importer</button>`}
-      <div class="h2sub" style="margin-top:14px">La qualité Basse / Moyenne / Haute change aussi la densité d'herbe et d'arbres : elle s'applique entièrement au prochain lancement.</div>
+      <div class="h2sub" style="margin-top:14px">La qualité Basse / Moyenne / Haute change aussi la densité d'herbe et d'arbres : elle s'applique entièrement au prochain lancement. La Basse désactive le post-traitement et passe les ombres en 1024 ; la Haute active tout.</div>
       <button class="back" data-b="${ctx === 'pause' ? 'pause' : 'title'}">Retour</button>`;
   }
   if (kind === 'credits') return `<h2>KAGE: REBIRTH</h2><div class="h2sub">Crédits</div><div class="credits">
       <p><b>Direction</b> · Eyden</p><p><b>Musique</b> · les compositions originales d'Eyden pour KAGE: REBIRTH (dix pistes de dojo et le thème Wrath of the Jade Dragon).</p>
       <p><b>Moteur, monde, personnages, animations, sons et code</b> · construits par Claude (Anthropic), avec Three.js. Tout est généré par le jeu sur ta machine : aucune image, aucun modèle 3D importé.</p>
       <p><b>Références d'ambiance</b> · vidéos de paysages de rônin transmises par Eyden, utilisées comme modèle de lumière, de brume et de cadrage, sans aucune image reprise.</p>
-      <p><b>Version</b> · Sakura Valley, chapitre 1. Les six autres régions ne sont pas encore construites.</p></div>
+      <p><b>Version</b> · dix vallées, dix dojos, deux modes (histoire et exploration libre). Monde, maisons, PNJ, combats et cinématiques entièrement générés en temps réel.</p></div>
       <button class="back" data-b="${ctx === 'pause' ? 'pause' : 'title'}">Retour</button>`;
   if (kind === 'confirmNew') return `<h2>新</h2><div class="h2sub">Nouvelle partie</div><p style="color:var(--paper2);line-height:1.8">Une partie est déjà sauvegardée. Commencer une nouvelle partie l'effacera.</p><div style="display:flex;gap:10px;margin-top:20px"><button class="back" data-b="newgo">Effacer et commencer</button><button class="back" data-b="title">Annuler</button></div>`;
   return '';
@@ -184,7 +186,7 @@ export function hudUpdate(dt, inter) {
   $('tq').classList.toggle('ready', pl.special && pl.en >= 50); $('tr').classList.toggle('ready', pl.ult && pl.en >= 100);
   $('tq').style.opacity = pl.special ? 1 : 0.35; $('tr').style.opacity = pl.ult ? 1 : 0.35;
   const hr = Math.floor(W.time), mn = Math.floor((W.time - hr) * 60);
-  $('clock').textContent = `${String(hr).padStart(2, '0')}:${String(mn).padStart(2, '0')}  ·  ${W.weather.kind}`;
+  $('clock').textContent = `J${ST.day || 1}  ${String(hr).padStart(2, '0')}:${String(mn).padStart(2, '0')}  ·  ${W.weather.kind}`;
   const reg = G.region || REGIONS[0];
   $('regk').textContent = reg.kanji; $('regn').textContent = reg.name; $('sealn').textContent = sealsCount(ST.seals) + ' / 10 sceaux';
   $('ox').classList.toggle('hide', !pl.inWater);
@@ -192,8 +194,15 @@ export function hudUpdate(dt, inter) {
   $('oxb').classList.toggle('low', pl.oxygen < 30);
   $('uw').classList.toggle('on', !!W.underwater);
   miniT -= dt; if (miniT < 0) { miniT = 0.08; drawMini(); }
-  /* invite d'interaction */
-  if (inter && G.mode === 'play') { $('prompt').classList.remove('hide'); $('promptt').textContent = inter.label; } else $('prompt').classList.add('hide');
+  /* invite d'interaction : on rend la discussion libre visible, pas seulement dans l'aide */
+  let prompt = inter ? inter.label : '';
+  if (inter && inter.npc) prompt += '   ·   T discussion libre';
+  if (!inter && G.mode === 'play') {
+    let near = null, nd = 3.4;
+    for (const n of G.npcs) if (n.talkable && n.actor.root.visible && !n.duel) { const d = Math.hypot(n.pos.x - pl.pos.x, n.pos.z - pl.pos.z); if (d < nd) { nd = d; near = n; } }
+    if (near) prompt = 'T · Discuter librement avec ' + near.name;
+  }
+  if (prompt && G.mode === 'play') { $('prompt').classList.remove('hide'); $('promptt').textContent = prompt; } else $('prompt').classList.add('hide');
   /* cible verrouillée, combo */
   const L = pl.lock; $('lockbar').classList.toggle('hide', !L); if (L) { $('lockn').textContent = L.name; $('lockh').style.width = Math.max(0, L.hp / L.hpMax * 100) + '%'; const p = project(_p.set(L.pos.x, L.pos.y + 1.1, L.pos.z)); const r = $('reticle'); r.classList.toggle('hide', !p.ok); r.style.left = p.x + 'px'; r.style.top = p.y + 'px'; } else $('reticle').classList.add('hide');
   $('combo').classList.toggle('hide', !(pl.comboT > 0 && pl.combo > 1)); $('combon').textContent = pl.combo;

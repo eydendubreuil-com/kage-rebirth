@@ -144,7 +144,7 @@ function greetingFor(npc, m, c) {
 
 function pick(m, arr) {
   if (!arr || !arr.length) return '';
-  let i = hash(`${m.uid || m.name}|${m.home}|${m.conversations}|${arr.length}`) % arr.length;
+  let i = hash(`${m.uid || m.name}|${m.home}|${m.conversations}|${m.ambient || 0}|${arr.length}`) % arr.length;
   for (let k = 0; k < arr.length; k++) {
     const s = arr[(i + k) % arr.length];
     if (s !== m.last) { m.last = s; return s; }
@@ -153,6 +153,7 @@ function pick(m, arr) {
 }
 
 function topicsFor(npc, m) {
+  const c = context(npc, {});
   const pool = [
     { t: 'Parle-moi de toi', say: 'Parle-moi de toi.' },
     { t: 'Et ce village ?', say: 'Parle-moi de ce village.' },
@@ -160,12 +161,61 @@ function topicsFor(npc, m) {
     { t: 'Un conseil ?', say: 'Tu as un conseil pour moi ?' },
     { t: 'Comment vas-tu ?', say: 'Comment vas-tu ?' },
     { t: 'La météo', say: 'Quel temps fait-il ?' },
+    { t: 'Raconte-moi une histoire', say: 'Raconte-moi une histoire.' },
+    { t: 'Que penses-tu du KAGE TRIAL ?', say: 'Que penses-tu du KAGE TRIAL ?' },
+    { t: 'Tu as besoin d\'aide ?', say: 'Tu as besoin d\'aide ?' },
+    { t: 'Parle-moi du dojo', say: 'Parle-moi du dojo.' },
+    { t: 'Tu connais un raccourci ?', say: 'Tu connais un raccourci ?' },
   ];
   const open = pool.filter(x => !m.topics[strip(x.t)] || m.topics[strip(x.t)] < 2);
-  const chosen = (open.length ? open : pool).slice(0, 4).map(x => ({ t: x.t, say: x.say }));
-  if (m.affinity >= 6 && !m.toldSecret) chosen.splice(2, 0, { t: 'Un secret ?', say: 'Tu peux me confier un secret ?' });
+  const base = open.length ? open : pool;
+  /* deux questions de métier d'abord : un forgeron et une enfant ne parlent pas de la même chose. */
+  const lead = [];
+  if (m.role === 'ancienne') lead.push({ t: 'Parle-moi de Hana', say: 'Parle-moi de Hana.' }, { t: 'Raconte-moi une histoire', say: 'Raconte-moi une histoire.' });
+  else if (m.role === 'enfant') lead.push({ t: 'Tu connais Mochi ?', say: 'Tu connais Mochi ?' }, { t: 'Tu joues à quoi ?', say: 'Tu joues à quoi ?' });
+  else if (m.role === 'marchand') lead.push({ t: 'Qu\'est-ce que tu vends ?', say: 'Qu\'est-ce que tu vends ?' }, { t: 'Et ce village ?', say: 'Parle-moi de ce village.' });
+  else if (m.role === 'forgeron') lead.push({ t: 'Parle-moi de ta forge', say: 'Parle-moi de ta forge.' }, { t: 'Un conseil ?', say: 'Tu as un conseil pour moi ?' });
+  else if (m.role === 'maître' || m.role === 'disciple' || m.role === 'élève') lead.push({ t: 'Parle-moi du dojo', say: 'Parle-moi du dojo.' }, { t: 'Comment progresse-t-on ?', say: 'Comment progresse-t-on ?' });
+  else if (m.role === 'aubergiste') lead.push({ t: 'Qu\'est-ce qu\'on mange ?', say: 'Qu\'est-ce qu\'on mange ?' });
+  /* On tourne dans le répertoire à chaque échange : les quatre mêmes questions ne reviennent plus en boucle. */
+  const offset = (m.conversations * 3 + Math.max(0, m.affinity) + (m.role === 'marchand' ? 1 : 0)) % base.length;
+  const chosen = [];
+  for (const x of lead) if (!chosen.some(y => y.t === x.t)) chosen.push(x);
+  for (let i = 0; i < Math.min(5, base.length) && chosen.length < 5; i++) {
+    const x = base[(offset + i) % base.length];
+    if (!chosen.some(y => y.t === x.t)) chosen.push({ t: x.t, say: x.say });
+  }
+  if (m.affinity >= 6 && !m.toldSecret && !chosen.some(x => x.t === 'Un secret ?')) chosen.splice(2, 0, { t: 'Un secret ?', say: 'Tu peux me confier un secret ?' });
+  if (c.weather === 'pluie' || c.weather === 'brume') chosen.splice(1, 0, { t: 'On s\'abrite ?', say: 'On s\'abrite de la pluie ?' });
+  /* le départ reste toujours la dernière ligne, même quand les secrets et la météo s'ajoutent */
+  if (chosen.length > 6) chosen.length = 6;
   chosen.push({ t: 'Au revoir', bye: true });
   return chosen;
+}
+
+/* Une phrase d'ambiance, dite toute seule quand on s'approche : le village vit sans attendre le joueur. */
+export function ambientLine(npc, ST, other) {
+  const m = mindFor(npc), c = context(npc, ST);
+  const lines = [
+    `Le thé refroidit vite, aujourd'hui.`,
+    `Tu as vu ces nuages ? On dirait que la montagne respire.`,
+    `Les enfants courent encore autour du puits. Ils ne savent pas s'arrêter.`,
+    `On dit qu'un étranger est arrivé au dojo. Les vieux en parlent à voix basse.`,
+    `Le marché sera vide avant la nuit. Il faudra penser à rentrer.`,
+    `Je n'aime pas le silence qui vient du col. Ce n'est pas un silence ordinaire.`,
+    `Quand j'étais petit, on comptait les lanternes pour savoir si l'hiver était fini.`,
+    `Il y a des jours où j'oublie pourquoi je suis resté ici. Puis je regarde la vallée.`,
+    `Tu sais ce qu'on dit : les dojos ne se parlent plus, mais les chemins, eux, se souviennent.`,
+    `J'ai entendu une cloche, ce matin. Pourtant, le sanctuaire était vide.`,
+  ];
+  if (m.role === 'maître') lines.push(`Un sabre mal tenu fatigue plus vite qu'une journée de marche.`);
+  if (m.role === 'marchand') lines.push(`Si tu cherches quelque chose de rare, regarde d'abord ce que personne ne regarde.`);
+  if (m.role === 'enfant') lines.push(`Tu crois que les carpes savent qu'on les regarde ?`);
+  if (other) lines.push(`${other.name} dit que je parle trop. Il n'a pas tort.`, `On se connaît depuis assez longtemps pour ne plus se mentir. Enfin, presque.`);
+  if (c.weather === 'pluie' || c.weather === 'orage') lines.push(`Reste sous l'auvent. La rivière monte vite quand elle est en colère.`);
+  if (c.part === 'soir' || c.part === 'nuit') lines.push(`La nuit tombe. Les chemins ne sont pas sûrs après le dernier chant des grillons.`);
+  m.ambient = (m.ambient || 0) + 1;
+  return pick(m, lines);
 }
 
 export function greet(npc, ST) {
@@ -251,6 +301,12 @@ function replyText(npc, low, m, c, ST) {
     if (m.role === 'maître' || m.role === 'rival') return `${intro} Je vis à ${m.home}. ${m.role === 'rival' ? 'On verra si tu tiens trois coups.' : 'Ici, on apprend en écoutant avant de frapper.'}`;
     return `${intro} Je vis à ${m.home}. ${m.traits.includes('curieux') ? 'Je pose trop de questions, on me le reproche souvent.' : 'Je ne suis pas quelqu\'un de très important, mais je connais mon village.'}`;
   }
+  if (has(low, 'mochi')) return `Mochi ? La chatte rousse de Kai. Elle dort dans les rizières et revient quand elle a faim. Si tu la vois, dis-lui que le poisson n\'est pas un dû.`;
+  if (has(low, 'vends', 'vendre', 'marchandise', 'boutique', 'achat', 'acheter')) return m.role === 'marchand' ? `Des herbes, du fil, du riz et deux ou trois choses que je ne montre pas à tout le monde. Les prix sont ceux de la saison, pas ceux de ta bourse.` : `Je ne suis pas marchand. Pour ça, il faut aller sur la place du marché, ou parler à Zen pour le thé.`;
+  if (has(low, 'forge', 'forgeron', 'acier', 'lame')) return m.role === 'forgeron' ? `Le feu ne pardonne pas l\'impatience. Une bonne lame demande trois nuits, et un homme qui sait se taire pendant qu\'elle refroidit.` : `La forge est au village, près de la rue principale. On y répare les lames et les mauvaises habitudes.`;
+  if (has(low, 'progresse', 'progresser', 'apprendre', 'devenir plus fort', 'niveau')) return m.role === 'maître' || m.role === 'disciple' || m.role === 'élève' ? `Répète le geste jusqu\'à ce qu\'il ne demande plus de courage. La force vient après, et elle vient seule.` : `On apprend en marchant, puis en revenant. Le chemin compte plus que le dojo, parfois.`;
+  if (has(low, 'mange', 'manger', 'repas', 'cuisine', 'faim')) return m.role === 'aubergiste' || m.role === 'marchand' ? `Riz, soupe de miso, parfois un peu de poisson quand la rivière est généreuse. Rien qui prétende être autre chose que ce qu\'il est.` : `Le riz d\'ici a le goût de la terre noire. Le reste, c\'est selon la saison et la chance.`;
+  if (has(low, 'joue', 'jouer', 'jeu', 'tu fais quoi')) return m.role === 'enfant' ? `On court autour du puits, on compte les carpes, on invente des histoires de rônin. Tu veux jouer ?` : `Je ne joue plus beaucoup. Mais je regarde les enfants courir, et ça me suffit.`;
   if (has(low, 'qui est', 'connais tu', 'parle moi de')) { const who = whoHint(low, npc); if (who) return who; }
   if (has(low, 'comment vas tu', 'ca va', 'tu vas bien', 'comment tu vas')) {
     const mood = c.weather === 'orage' ? 'Un peu inquiet, avec cet orage. Et toi ?' : c.part === 'nuit' ? 'Fatigué. La nuit me rend bavard.' : m.affinity >= 6 ? 'Mieux, maintenant que tu es là.' : 'Comme toujours. Le dos un peu raide, mais vivant.';
