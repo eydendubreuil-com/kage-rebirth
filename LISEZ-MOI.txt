@@ -1,51 +1,35 @@
-KAGE: REBIRTH - JEU COMPLET
-Archive mise a jour le 25/11/2026
+KAGE: REBIRTH — JEU COMPLET
+Archive mise à jour le 26/11/2026
 
-CONTENU : 26 fichiers de jeu + ce manifeste
+CONTENU
 - index.html : page du jeu
 - 13 modules JavaScript : main, game, world, story, ui, actor, audio, util, regions, secrets, cloud, config, npc-ai
-- 11 pistes audio : kage-theme.mp3 + dojo-01.mp3 a dojo-10.mp3
-- firestore.rules : regles de la sauvegarde en ligne Firebase
+- 11 pistes audio : kage-theme.mp3 + dojo-01.mp3 à dojo-10.mp3
+- firestore.rules : règles de la sauvegarde en ligne Firebase
 
-POINTS CLES DE CETTE VERSION
-- Dix dojos : Sakura + 9 vallees (Kage, Yama, Akai, Mizu, Hisui, Yuki, Raiden, Tsuki, Mugen)
-- Histoire en 10 chapitres + quetes secondaires
-- 4 personnages jouables, equipement, inventaire, boutiques, nage, meteo, commandes secretes
-- Environnement retravaille : pignons fermes, arbres et sous-bois, puits, colliders avec hauteur
-- Eau visible de dessous, collisions balayees, petales purement decoratifs
-- Visages, mains et animations des personnages ameliores
-- Discussion libre avec T et agent local par PNJ (npc-ai.js), sans reseau ni cle API
+POINTS CLÉS DE CETTE VERSION
+- Dix vallées et dix dojos jouables : Sakura, Kage, Yama, Akai, Mizu, Hisui, Yuki, Raiden, Tsuki, Mugen.
+- Deux modes depuis l'accueil : « Mode histoire » (jour par jour, quêtes, duels, embuscades, cinématiques) et « Exploration libre » (les dix vallées ouvertes, sans obligation de quête).
+- Histoire en dix chapitres, quêtes secondaires, duels de maîtres, choix de combattant, équipement, boutiques, nage, météo et commandes secrètes.
+- Village et maisons réellement visitables : murs, plancher, plafond, porte ouverte, meubles et collisions. Les toits et pignons sont fermés.
+- PNJ : discussion libre avec T (saisie de texte), réponses automatiques, sujets qui tournent, mémoire de conversation et répliques d'ambiance automatiques entre habitants.
+- Graphismes et confort : lumière adoucie, cinématiques nettes sans flou, câbles suspendus avec affaissement, nouveaux bancs, tonneaux, lanternes, jardins et cordes à linge.
+- Netteté et contraste : antialiasing FXAA, tone mapping ACES, exposition équilibrée, ombres douces, anisotropie maximale, éclairage à trois points et post-traitement léger (contraste, saturation, vignettage, bloom discret).
+- Fluidité : collisions balayées, deux lampes d'intérieur partagées, résolution adaptative et décors groupés pour limiter les appels de rendu.
+- Paramètres : qualité Basse / Moyenne / Haute, contraste Normal / Fort et curseur de Netteté.
 
-INVENTAIRE ET EMPREINTES SHA-256 (nom|octets|sha256)
-actor.js|43327|0E2405E07BF0B766FDC47C74C9BC5260E8E52F0C30847B2CAEADF9CB2A3B8EC6
-audio.js|9822|B709E01C4FCE7A0EB11FB3F40331428608E6C309366F1F098F62A5608F9728F2
-cloud.js|2871|F91B426D1CEE80E00CB5FD6CAF63B9891F73050FBE709BAE0DFA65103F7839C2
-config.js|404|8A78B6BF4F9FBA36878F6ABDBFCD18C8C6124A55A6C8F1D177BF538F3A758DDE
-dojo-01.mp3|2762159|2D76BEFB76267036D75BA0F673E09D32A7896B1965F7913E77BE55DC4D33D466
-dojo-02.mp3|2764079|4E211A00E825227E1835EA11479A93193DD117710ACDBE3E1DD590A8D8EBBDD9
-dojo-03.mp3|2837423|CCCA651B634CE3C30AE74A59A34D1176EF0743AFE383B10532E24EA151B7C3F4
-dojo-04.mp3|2836655|D35F9468EC09E5F812E0FC62D9C0884E221FC05D2E1733E10D5A28980FAFAB66
-dojo-05.mp3|2822831|19E5373CFC2BBF8CE102C8CDE85BB54FD17A2D0AF321AA954D40B50B8131B5F5
-dojo-06.mp3|2807855|EDFAB97F1EB61D4C3D669206207FE8523ED3E6BE49595A2460B6B98EDCFED643
-dojo-07.mp3|2863919|788942827BC939B7B281995452FBB583422989137F5904A87D308157E6DBAA05
-dojo-08.mp3|2901551|9A20DD8181950CA5376E9F5330AD3F01D9348C609A782C3CDFC3CD37355EC496
-dojo-09.mp3|2873135|5400A49929B68492D694488C1647AD8A3FFD9A70255130AD337FB470B2CABF43
-dojo-10.mp3|2726447|A4314313C34BFE9EF2D308E0A0FB096EC560BD5F81C63471286B9518F06D16EC
-firestore.rules|211|0D6BD36F5F50C23839D3F58877DECADD5811102984EC2F879D3C4011322B1EEF
-game.js|45235|A11E0BBD7D85E9EB39DF1FAB67320AC3F306381596698757A22BB587FA831178
-index.html|24817|76B819F7E25A80B8CF826685DA3ABB60F280598BA29EA282276626EE69D6DB33
-kage-theme.mp3|2156469|AE7857645ED7070F1E56665F04217FDDBAF052A80B2671D6EE8D9C4A9D66C08B
-main.js|25487|FA7263D48C62D37A0BB8A0EDD242D7CC6EFAA904F0D33EEEE9982E8F67C5B586
-npc-ai.js|24675|CD5EC87D6475A696C454630130CBA8CD0885D2D83495D6ED8182AF75020E87ED
-regions.js|19981|BDAE2C47F7107D940ACF17C0593AD426A6BF0DCAB49BC16E156A5C3F2CE482CD
-secrets.js|3743|EAE8D3D091A8AC8C8B324BFFC8E942E15DA6DA985CBC8C5166E216F75D3FECB2
-story.js|66438|15F455541FAFB07105250AE4B85C021070E34F9BD86E2977EB0714BFE7B0E4B7
-ui.js|27629|C4EC725F9DE49AA39D46016BB79101C62EF4F76FD6BB85D4C70BEE6A0F1AC3E2
-util.js|20561|4482E9AAF9EC47A79A077179A9A0CD7E0AE37AB9FA4865A3E8D3F18FCD5A7C5E
-world.js|122911|854DA86ECE2F7AB90ACBEEC4A6703AABA6EB8083D1A30FB6840A5A9D8F34B6D8
+COMMANDES ESSENTIELLES
+ZQSD / flèches : se déplacer — Maj : courir — Espace : sauter / esquiver en combat
+Souris : caméra (clic pour capturer, Échap pour libérer) — E : parler / agir — T : discuter librement
+Clic gauche : attaque rapide — Clic droit : attaque lourde — F : garde / parade
+Tab : verrouiller — M : carte — J : journal — I : inventaire — Échap : pause
 
-VERIFICATION RAPIDE
-- Tous les fichiers doivent rester a la racine de l archive.
-- Dans le jeu : menu Selection du monde doit afficher 10 vallees ; le journal affiche 10 sceaux.
-- Lancer avec un serveur HTTP : python -m http.server 8000 puis http://localhost:8000
-- Ne pas ouvrir index.html par double-clic (modules ES + importmap).
+LANCEMENT
+- Placer tous les fichiers dans le même dossier.
+- Ouvrir un terminal dans ce dossier et lancer : python -m http.server 8000
+- Ouvrir http://127.0.0.1:8000/index.html
+- Ne pas ouvrir index.html par double-clic : les modules ES et l'importmap ont besoin d'un serveur HTTP.
+- Le jeu fonctionne hors ligne ; aucune clé API n'est nécessaire pour l'histoire et les PNJ.
+
+SAUVEGARDE
+La partie est enregistrée dans le navigateur (et peut être exportée en code depuis les Paramètres). La sauvegarde en ligne Firebase est optionnelle et configurée dans config.js / cloud.js.
